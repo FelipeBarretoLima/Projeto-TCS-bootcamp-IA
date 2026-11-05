@@ -1,0 +1,18 @@
+# Ambiente virtual
+.venv/
+
+# Segredos / variáveis de ambiente
+.env
+
+# Cache do Python e do pytest
+__pycache__/
+.pytest_cache/
+
+# Extratos reais: NUNCA vão para o git
+data/
+
+# Metadados do pacote instalado em modo editável
+*.egg-info/
+
+# Dados do módulo de ML (derivados dos extratos reais)
+ml/dados/
