@@ -1,0 +1,124 @@
+.zona {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 4.5rem 2rem;
+  border: 2px dashed var(--borda);
+  border-radius: var(--raio-grande);
+  background: var(--superficie);
+  text-align: center;
+  cursor: pointer;
+  transition: border-color 0.2s ease-out, background-color 0.2s ease-out;
+}
+
+.zona:hover {
+  border-color: var(--azul);
+}
+
+/* arrastando um arquivo: o contorno vira o degradê da marca */
+.arrastando {
+  border-color: transparent;
+  background:
+    linear-gradient(var(--selo-fundo), var(--selo-fundo)) padding-box,
+    var(--marca-degrade) border-box;
+}
+
+/* depois de um resultado, a zona encolhe para a tabela subir */
+.compacta {
+  flex-direction: row;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 0.35rem 1rem;
+  padding: 1.25rem 1.5rem;
+}
+
+.compacta .icone {
+  width: 3rem;
+  height: 3rem;
+  margin-bottom: 0;
+}
+
+.compacta .titulo {
+  font-size: 1.0625rem;
+}
+
+.compacta .dica {
+  display: none;
+}
+
+.enviando {
+  cursor: progress;
+}
+
+.icone {
+  display: grid;
+  place-items: center;
+  width: 5rem;
+  height: 5rem;
+  margin-bottom: 1rem;
+  border-radius: 50%;
+  background: var(--marca-degrade-diagonal);
+  color: #fff;
+  box-shadow: 0 8px 24px rgb(237 11 42 / 0.22);
+  transition: transform 0.35s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.zona:hover .icone,
+.arrastando .icone {
+  transform: translateY(-4px);
+}
+
+.titulo {
+  font-size: 1.375rem;
+  font-weight: 600;
+  color: var(--tinta);
+}
+
+.texto {
+  color: var(--tinta-suave);
+  overflow-wrap: anywhere;
+}
+
+.link {
+  font-weight: 600;
+  color: var(--azul-texto);
+}
+
+.dica {
+  margin-top: 0.5rem;
+  font-size: 0.8125rem;
+  color: var(--tinta-suave);
+}
+
+.girando {
+  animation: girar 0.9s linear infinite;
+}
+
+@keyframes girar {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (max-width: 720px) {
+  .zona {
+    padding: 2.5rem 1.25rem;
+  }
+
+  .titulo {
+    font-size: 1.125rem;
+  }
+
+  .compacta {
+    padding: 1rem 1.1rem;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .icone,
+  .girando {
+    transition: none;
+    animation: none;
+  }
+}

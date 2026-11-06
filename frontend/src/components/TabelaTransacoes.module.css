@@ -1,0 +1,130 @@
+.rolagem {
+  overflow-x: auto;
+}
+
+.tabela {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.tabela th,
+.tabela td {
+  padding: 0.85rem 1.75rem;
+  text-align: left;
+  vertical-align: middle;
+  border-bottom: 1px solid var(--borda);
+}
+
+.tabela th {
+  background: var(--superficie-cabecalho);
+  font-size: 0.9375rem;
+  font-weight: 600;
+  color: var(--tinta-suave);
+  white-space: nowrap;
+}
+
+.tabela tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.tabela tbody tr {
+  transition: background-color 0.15s ease-out;
+}
+
+.tabela tbody tr:hover {
+  background: var(--fundo);
+}
+
+.data {
+  color: var(--tinta-suave);
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.principal {
+  display: block;
+  color: var(--tinta);
+}
+
+.detalhe {
+  display: block;
+  margin-top: 0.1rem;
+  font-size: 0.8125rem;
+  color: var(--tinta-suave);
+}
+
+.numero {
+  text-align: right !important;
+  white-space: nowrap;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.entrada {
+  color: var(--verde);
+}
+
+.saida {
+  color: var(--vermelho);
+}
+
+/* celular: cada linha vira um bloco (descrição em cima; data, categoria e valor embaixo) */
+@media (max-width: 720px) {
+  .tabela thead {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+  }
+
+  .tabela,
+  .tabela tbody {
+    display: block;
+  }
+
+  .tabela tbody tr {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-areas:
+      'descricao valor'
+      'data data'
+      'categoria categoria';
+    align-items: start;
+    gap: 0.35rem 0.9rem;
+    padding: 0.9rem 1.1rem;
+    border-bottom: 1px solid var(--borda);
+  }
+
+  .tabela tbody tr:last-child {
+    border-bottom: none;
+  }
+
+  .tabela td {
+    padding: 0;
+    border: none;
+  }
+
+  .descricao {
+    grid-area: descricao;
+  }
+
+  .data {
+    grid-area: data;
+    font-size: 0.875rem;
+  }
+
+  .categoria {
+    grid-area: categoria;
+  }
+
+  .numero {
+    grid-area: valor;
+  }
+}
+
+.vazio {
+  margin: 0;
+  padding: 2rem 1.75rem;
+  color: var(--tinta-suave);
+}

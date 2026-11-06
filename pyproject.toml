@@ -15,7 +15,7 @@ where = ["extracao/src"]
 [tool.setuptools.package-data]
 extrato = ["dados/*.txt"]
 
-# testes dos dois módulos; "." deixa o pacote ml importável
+# testes dos módulos; "." deixa os pacotes ml e api importáveis
 [tool.pytest.ini_options]
-testpaths = ["extracao/tests", "ml/tests"]
+testpaths = ["extracao/tests", "ml/tests", "api/tests"]
 pythonpath = ["extracao/src", "."]

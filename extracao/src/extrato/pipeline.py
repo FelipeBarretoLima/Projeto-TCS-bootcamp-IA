@@ -191,10 +191,12 @@ def executa(
     saida: Path,
     dir_privado: Path,
     parsers: Sequence[type[Parser]] | None = None,
+    pessoas: frozenset[str] | None = None,
 ) -> Execucao:
+    """`pessoas`: nomes marcados como pessoa. None = lê os mapas de `dir_privado`."""
     if not re.fullmatch(r"u\d{2}", usuario):
         raise ValueError("--usuario deve ser 'u' + 2 dígitos (ex.: u07)")
-    return _finaliza(_extrai_pasta(entrada, parsers), usuario, saida, dir_privado)
+    return _finaliza(_extrai_pasta(entrada, parsers), usuario, saida, dir_privado, pessoas=pessoas)
 
 
 def _extrai_pasta(entrada: Path, parsers: Sequence[type[Parser]] | None) -> list[_Extraido]:

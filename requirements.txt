@@ -9,5 +9,11 @@ scikit-learn==1.9.1
 matplotlib==3.11.2
 ipykernel==7.4.0
 
+# API (FastAPI)
+fastapi==0.162.0
+uvicorn[standard]==0.54.0
+python-multipart==0.0.33
+httpx2==2.16.0
+
 # Instala o próprio projeto (src/extrato) em modo editável
 -e .

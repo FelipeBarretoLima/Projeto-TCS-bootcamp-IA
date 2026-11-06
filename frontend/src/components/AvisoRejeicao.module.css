@@ -1,0 +1,23 @@
+.aviso {
+  display: flex;
+  gap: 0.9rem;
+  padding: 1.15rem 1.5rem;
+  border-radius: var(--raio-grande);
+  background: var(--vermelho-fundo);
+  color: var(--tinta);
+}
+
+.icone {
+  flex: none;
+  color: var(--vermelho);
+}
+
+.aviso strong {
+  font-weight: 700;
+}
+
+.aviso p {
+  max-width: 70ch;
+  margin: 0.2rem 0 0;
+  color: var(--tinta-suave);
+}
