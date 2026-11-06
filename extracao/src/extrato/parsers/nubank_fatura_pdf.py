@@ -57,6 +57,7 @@ _RESUMO: dict[str, bool] = {
     "outros lançamentos": True,
     "juros de financiamento": True,
     "iof de financiamento": True,
+    "iof de compras internacionais": True,
     "estorno de juros": True,
 }
 
@@ -73,6 +74,7 @@ _FIXOS: dict[str, tuple[str, Meio, bool]] = {
 _PAGAMENTO = re.compile(rf"^Pagamento em \d{{2}} {_M}$")
 _ESTORNO_JUROS = re.compile(r"^Estorno de juros\b")
 _ESTORNO_COMPRA = re.compile(r'^Estorno de (?:"(?P<loja>.+)"|(?P<loja_nupay>.+?)(?: - NuPay)+)$')
+_IOF_INTERNACIONAL = re.compile(r'^IOF de ".+"$')  # IOF cobrado sobre uma compra no exterior
 # começo de descrição que indica lançamento financeiro: se não for um dos conhecidos, é erro
 _FINANCEIRO = re.compile(r"^(?:Juros|IOF|Multa|Encargo|Saldo|Crédito|Estorno|Pagamento|Anuidade|Tarifa|"
                          r"Ajuste|Parcelamento|Encerramento|Financiamento)\b")
@@ -84,6 +86,7 @@ _MEIOS = {normaliza_historico(h): m for h, m, _ in _FIXOS.values()} | {
     normaliza_historico(h): m for h, m in [
         ("PAGAMENTO DA FATURA", Meio.PAGAMENTO_FATURA),
         ("ESTORNO DE JUROS", Meio.ESTORNO),
+        ("IOF DE COMPRA INTERNACIONAL", Meio.JUROS_IOF),
         ("ESTORNO DE COMPRA", Meio.ESTORNO),
         ("COMPRA NO CRÉDITO", Meio.CARTAO_CREDITO),
         ("COMPRA PARCELADA", Meio.CARTAO_CREDITO),
@@ -232,6 +235,8 @@ class NubankFaturaPdf(Parser):
             return "PAGAMENTO DA FATURA", "", True
         if _ESTORNO_JUROS.match(desc):
             return "ESTORNO DE JUROS", "", False
+        if _IOF_INTERNACIONAL.match(desc):
+            return "IOF DE COMPRA INTERNACIONAL", "", False  # imposto do banco: sem contraparte
         if m := _ESTORNO_COMPRA.match(desc):
             return "ESTORNO DE COMPRA", m["loja"] or m["loja_nupay"], False
         if _FINANCEIRO.match(desc):

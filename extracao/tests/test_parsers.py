@@ -134,3 +134,14 @@ def test_ano_da_data_da_fatura(ddmm, esperado):
     venc = date(2025, 10, 5)
     assert BradescoCartaoPdf()._data(ddmm, venc, 1) == esperado
     assert SantanderCartaoPdf()._data(ddmm, venc, 1) == esperado
+
+
+@pytest.mark.parametrize("linha", ["Gerado em: 06/11/2026 - 8h20", "Gerado em: 06/11/2026 - 14h05"])
+def test_inter_cabecalho_aceita_hora_com_1_ou_2_digitos(linha):
+    from extrato.parsers.inter_conta_pdf import _CAB
+    assert _CAB[0].match(linha)
+
+
+def test_nubank_iof_de_compra_internacional():
+    assert NubankFaturaPdf._classifica('IOF de "LOJA FICTICIA* ASSINATURA"', D("4.00")) == (
+        "IOF DE COMPRA INTERNACIONAL", "", False)

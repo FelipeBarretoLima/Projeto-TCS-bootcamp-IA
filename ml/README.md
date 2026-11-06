@@ -1,31 +1,66 @@
 # Módulo de ML
 
-O parser (`python -m extrato tudo`) gera `data/saida/transacoes.csv` **sem** categoria.
-Este módulo acrescenta a coluna `categoria`, sem mudar nenhuma outra coluna.
+Classifica cada transação do CSV do parser em uma de 8 categorias. O parser (`python -m extrato tudo`)
+gera `data/saida/transacoes.csv` **sem** categoria; este módulo rotula o treino, compara modelos e
+gera o modelo final.
 
 ```
 extrato (parser)  ->  data/saida/transacoes.csv            (8 colunas)
 ml.rotular        ->  ml/dados/transacoes_rotuladas.csv    (as mesmas 8 + categoria)   treino
-ml (classificador, próximo passo)  ->  CSV do parser + categoria                       aplicação
+ml.treinar        ->  ml/modelos/svm_tfidf.pkl             (modelo final)
+.pkl              ->  CSV do parser + categoria prevista                               aplicação
 ```
 
-## Rotular o treino
+## Arquivos
+
+| Arquivo | Para quê |
+|---|---|
+| `exploracao.ipynb` | **Escolha do modelo**: compara 9 classificadores, one-hot × TF-IDF na contraparte, com e sem data, e o ajuste do SVM. Justifica o campeão. |
+| `modelo_campeao.ipynb` | **O modelo escolhido isolado**: pipeline, métricas, heatmaps, desempenho por usuário, o que aprendeu, onde erra e o `.pkl`. |
+| `rede_neural.ipynb` | Experimento com rede neural (PyTorch, GPU). |
+| `treinar.py` | Monta o modelo campeão (`monta_modelo()`), treina com todo o CSV rotulado e salva o `.pkl`. |
+| `rotular.py` | Gera o CSV de treino: CSV do parser + `categoria` (regras + mapa de estabelecimentos). |
+| `classes.py` | As 8 classes e as regras determinísticas (financeiro, receitas, contas, transferência). |
+| `tests/` | Testes com dados inventados (`pytest` na raiz). |
+| `dados/`, `modelos/` | CSV rotulado e `.pkl` — **fora do git** (derivados dos extratos reais). |
+
+## Modelo escolhido
+
+**SVM linear + TF-IDF de caracteres na `contraparte`**, one-hot em `historico`/`meio`/`tipo`/`banco`
+e `log + min-max` no valor, sem data. Os números e a justificativa estão em `exploracao.ipynb`.
+
+## Comandos
 
 ```bash
-python -m extrato tudo
-python -m ml.rotular
+python -m extrato tudo     # extratos -> CSV do parser
+python -m ml.rotular       # CSV do parser -> CSV rotulado (treino)
+python -m ml.treinar       # CSV rotulado -> ml/modelos/svm_tfidf.pkl
 ```
 
-A categoria vem de regras (receitas, financeiro, contas, transferência para pessoa) e, para compras em
-estabelecimento, do mapa revisado à mão em `data/privado/estabelecimentos_revisar.csv` e
+A categoria do treino vem de regras (receitas, financeiro, contas, transferência para pessoa) e, para
+compras em estabelecimento, do mapa revisado à mão em `data/privado/estabelecimentos_revisar.csv` e
 `data/privado/estabelecimentos_novos.csv` (classe em branco = aceita a sugerida). Estabelecimentos que
 ainda não estão no mapa entram no fim de `estabelecimentos_novos.csv` a cada rotulagem.
+
+## Usar o modelo
+
+O pré-processamento está dentro do `.pkl`: ele recebe o CSV do parser como está e devolve a categoria.
+
+```python
+import joblib, pandas as pd
+modelo = joblib.load("ml/modelos/svm_tfidf.pkl")
+extrato = pd.read_csv("data/teste_saida/u99.csv", keep_default_na=False)
+extrato["categoria_prevista"] = modelo.predict(extrato)
+```
+
+Extratos de teste ficam **fora de `data/raw/`** (ex.: `data/teste/`), para não entrarem no treino.
 
 ## Classes
 
 `mercado`, `alimentacao_fora`, `transporte`, `compras`, `contas_servicos`, `transferencia_pessoa`,
-`receitas`, `financeiro` (ver `ml/classes.py`).
+`receitas`, `financeiro` (ver `classes.py`).
 
-## Dados
+## Notebooks e privacidade
 
-`ml/dados/` fica fora do git: é derivado dos extratos reais.
+As saídas das células podem conter dados derivados dos extratos (o `modelo_campeao.ipynb` mostra pedaços
+de nomes de lojas). Antes de fazer commit: **Clear All Outputs**.
