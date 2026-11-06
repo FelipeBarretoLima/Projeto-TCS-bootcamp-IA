@@ -33,7 +33,7 @@ _MESES = {m: i for i, m in enumerate(
     "Janeiro Fevereiro Março Abril Maio Junho Julho Agosto Setembro Outubro Novembro Dezembro".split(), start=1)}
 _V = r"-?R\$ -?\d{1,3}(?:\.\d{3})*,\d{2}"
 _CAB = [
-    re.compile(r"^\S+ em: \d{2}/\d{2}/\d{4} - \d{2}h\d{2}$"),
+    re.compile(r"^\S+ em: \d{2}/\d{2}/\d{4} - \d{1,2}h\d{2}$"),  # hora com 1 ou 2 dígitos ("8h20", "14h05")
     None,  # nome do titular
     re.compile(r"^CPF/CNPJ: .+, Instituição: Banco Inter, Agência: [\d-]+, Conta: [\d-]+$"),
     re.compile(r"^Período: \d{2}/\d{2}/\d{4} a \d{2}/\d{2}/\d{4}$"),

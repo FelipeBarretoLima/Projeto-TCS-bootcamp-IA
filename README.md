@@ -61,22 +61,6 @@ pip list
 Se o passo 2 der erro de "execução de scripts desabilitada", rode uma vez
 `Set-ExecutionPolicy -Scope CurrentUser RemoteSigned` e tente de novo.
 
-### macOS / Linux
-
-```bash
-# 1. Criar o ambiente virtual
-python3 -m venv .venv
-
-# 2. Ativar
-source .venv/bin/activate
-
-# 3. Instalar as dependências (dos dois módulos)
-pip install -r requirements.txt
-
-# 4. Conferir
-pip list
-```
-
 No passo 4, a lista deve mostrar `pdfplumber`, `pandas`, `pydantic`, `python-dotenv`, `pytest`,
 `scikit-learn`, `matplotlib`, `ipykernel`, `fastapi` e `uvicorn`. Com o venv ativo, o terminal mostra
 `(.venv)` no início da linha. Para sair do venv: `deactivate`.

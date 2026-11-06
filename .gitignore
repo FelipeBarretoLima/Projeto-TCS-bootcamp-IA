@@ -16,3 +16,6 @@ data/
 
 # Dados do módulo de ML (derivados dos extratos reais)
 ml/dados/
+
+# Modelos treinados (o vocabulário do TF-IDF guarda pedaços de nomes reais de lojas)
+ml/modelos/
