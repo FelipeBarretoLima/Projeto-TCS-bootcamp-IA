@@ -15,5 +15,8 @@ uvicorn[standard]==0.54.0
 python-multipart==0.0.33
 httpx2==2.16.0
 
+# Módulo do agente
+langchain==1.4.9
+
 # Instala o próprio projeto (src/extrato) em modo editável
 -e .
