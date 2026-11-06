@@ -8,16 +8,28 @@ padronizado e anônimo e classifica cada transação numa categoria de gasto.
 ```
 extracao/      módulo de extração (parser): extratos -> CSV padronizado e anônimo
 ml/            módulo de ML: CSV do parser -> categoria de cada transação
+api/           API HTTP (FastAPI): expõe a extração e a categoria para o frontend
+frontend/      página web (React + TypeScript + Vite)
 data/          extratos reais e saídas (fora do git)
 ```
 
-Cada módulo tem o seu README: [extracao/README.md](extracao/README.md) e [ml/README.md](ml/README.md).
+Cada módulo tem o seu README: [extracao/README.md](extracao/README.md), [ml/README.md](ml/README.md)
+e [frontend/README.md](frontend/README.md).
 
-Fluxo:
+Fluxo pela linha de comando:
 
 ```
 data/raw/  --(python -m extrato tudo)-->  data/saida/transacoes.csv  --(ml)-->  CSV + categoria
 ```
+
+Fluxo pela página:
+
+```
+navegador --(upload)--> api (POST /api/extratos) --> extração + categoria --> tabela na página
+```
+
+O arquivo enviado pela página é processado numa pasta temporária e apagado em seguida: nada fica
+gravado no servidor.
 
 ## Pré-requisito
 
@@ -66,8 +78,27 @@ pip list
 ```
 
 No passo 4, a lista deve mostrar `pdfplumber`, `pandas`, `pydantic`, `python-dotenv`, `pytest`,
-`scikit-learn`, `matplotlib` e `ipykernel`. Com o venv ativo, o terminal mostra `(.venv)` no início
-da linha. Para sair do venv: `deactivate`.
+`scikit-learn`, `matplotlib`, `ipykernel`, `fastapi` e `uvicorn`. Com o venv ativo, o terminal mostra
+`(.venv)` no início da linha. Para sair do venv: `deactivate`.
+
+## Rodar a página
+
+São dois servidores, cada um num terminal (com o venv ativo no primeiro):
+
+```bash
+# Terminal 1, na raiz: a API em http://localhost:8000 (documentação em /docs)
+uvicorn api.main:app --reload
+
+# Terminal 2: o frontend em http://localhost:5173
+cd frontend
+npm install      # só na primeira vez
+npm run dev
+```
+
+Abra http://localhost:5173 e envie um extrato. O frontend precisa de **Node.js 22** (ou 20.19+).
+
+A API lê (sem gravar) os mapas de `data/privado/` para anonimizar e categorizar igual à linha de
+comando. Sem essa pasta, a categoria vem só das regras fixas.
 
 ## Testes
 
@@ -75,7 +106,7 @@ da linha. Para sair do venv: `deactivate`.
 pytest
 ```
 
-Roda os testes dos dois módulos (`extracao/tests` e `ml/tests`). As fixtures de teste são sempre
+Roda os testes de `extracao/tests`, `ml/tests` e `api/tests`. As fixtures de teste são sempre
 inventadas: nunca copie conteúdo de extrato real para os testes.
 
 ## Dados e privacidade

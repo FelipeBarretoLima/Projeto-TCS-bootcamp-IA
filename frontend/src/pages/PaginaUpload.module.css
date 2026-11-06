@@ -1,0 +1,65 @@
+.pagina {
+  display: flex;
+  flex-direction: column;
+  gap: 1.75rem;
+}
+
+.topo {
+  margin-bottom: 0.25rem;
+}
+
+.topo h1 {
+  font-size: 2.375rem;
+  font-weight: 800;
+  line-height: 1.15;
+  letter-spacing: -0.02em;
+}
+
+.topo p {
+  max-width: 68ch;
+  margin: 0.6rem 0 0;
+  font-size: 1.125rem;
+  color: var(--tinta-suave);
+}
+
+.resultado {
+  display: flex;
+  flex-direction: column;
+  gap: 1.75rem;
+  /* não esconder o topo do resultado sob o cabeçalho fixo */
+  scroll-margin-top: 6rem;
+}
+
+.painel {
+  overflow: hidden;
+  border: 1px solid var(--borda);
+  border-radius: var(--raio-grande);
+  background: var(--superficie);
+  box-shadow: var(--sombra);
+}
+
+.painelTopo {
+  display: flex;
+  flex-direction: column;
+  gap: 1.1rem;
+  padding: 1.6rem 1.75rem 1.5rem;
+}
+
+.painelTopo h2 {
+  font-size: 1.375rem;
+  font-weight: 700;
+}
+
+@media (max-width: 720px) {
+  .topo h1 {
+    font-size: 1.875rem;
+  }
+
+  .topo p {
+    font-size: 1rem;
+  }
+
+  .painelTopo {
+    padding: 1.25rem 1.1rem;
+  }
+}

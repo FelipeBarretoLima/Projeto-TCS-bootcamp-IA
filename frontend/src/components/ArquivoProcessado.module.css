@@ -1,0 +1,53 @@
+.arquivo {
+  display: flex;
+  align-items: center;
+  gap: 0.9rem;
+  padding: 1.15rem 1.5rem;
+  border: 1px solid var(--borda);
+  border-radius: var(--raio-grande);
+  background: var(--superficie);
+}
+
+.icone {
+  flex: none;
+  color: #eb005f;
+}
+
+.nome {
+  flex: 1;
+  min-width: 0;
+  font-size: 1.0625rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.aceito,
+.rejeitado {
+  flex: none;
+  font-weight: 600;
+}
+
+.aceito {
+  color: var(--verde);
+}
+
+@media (max-width: 720px) {
+  .arquivo {
+    flex-wrap: wrap;
+    padding: 1rem 1.1rem;
+  }
+
+  .nome {
+    flex-basis: calc(100% - 2.5rem);
+  }
+
+  .aceito,
+  .rejeitado {
+    padding-left: 2.25rem;
+  }
+}
+
+.rejeitado {
+  color: var(--vermelho);
+}
