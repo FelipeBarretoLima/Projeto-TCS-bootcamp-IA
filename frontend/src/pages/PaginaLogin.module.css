@@ -1,0 +1,175 @@
+/* Login: degradê da marca à esquerda, formulário à direita (referencias/referencia_login.png). */
+
+.tela {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  min-height: 100svh;
+}
+
+.lateral {
+  display: flex;
+  align-items: flex-end;
+  padding: 4rem;
+  background: var(--marca-degrade-diagonal);
+  color: #fff;
+}
+
+.chamada {
+  margin: 0 0 1.25rem;
+  font-size: clamp(2.5rem, 4.5vw, 4rem);
+  font-weight: 800;
+  line-height: 1.08;
+  letter-spacing: -0.02em;
+}
+
+.apoio {
+  max-width: 34rem;
+  margin: 0;
+  font-size: 1.25rem;
+  opacity: 0.95;
+}
+
+.principal {
+  position: relative;
+  display: grid;
+  place-items: center;
+  padding: 3rem 2rem;
+  background: var(--fundo);
+}
+
+.tema {
+  position: absolute;
+  top: 1.5rem;
+  right: 1.5rem;
+  display: grid;
+  place-items: center;
+  width: 2.5rem;
+  height: 2.5rem;
+  border: none;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--tinta-suave);
+  cursor: pointer;
+}
+
+.tema:hover {
+  background: var(--superficie-cabecalho);
+  color: var(--tinta);
+}
+
+.caixa {
+  width: 100%;
+  max-width: 30rem;
+}
+
+.caixa h1 {
+  margin: 3rem 0 0.4rem;
+  font-size: 2rem;
+  line-height: 1.2;
+}
+
+.subtitulo {
+  margin: 0 0 2rem;
+  color: var(--tinta-suave);
+}
+
+.formulario {
+  display: grid;
+  gap: 1.25rem;
+}
+
+.formulario label {
+  display: grid;
+  gap: 0.5rem;
+  font-weight: 600;
+  font-size: 0.95rem;
+}
+
+.formulario input {
+  height: 3.4rem;
+  padding: 0 1.1rem;
+  border: 1px solid var(--borda);
+  border-radius: var(--raio);
+  background: var(--superficie);
+  color: var(--tinta);
+  font: inherit;
+  font-weight: 400;
+}
+
+.formulario input:focus-visible {
+  outline: 2px solid var(--azul);
+  outline-offset: 1px;
+  border-color: transparent;
+}
+
+.botao {
+  height: 3.6rem;
+  margin-top: 0.5rem;
+  border: none;
+  border-radius: 999px;
+  background: var(--azul);
+  color: #fff;
+  font: inherit;
+  font-weight: 700;
+  font-size: 1.05rem;
+  cursor: pointer;
+  transition: background-color 0.15s ease-out;
+}
+
+.botao:hover:not(:disabled) {
+  background: var(--azul-hover);
+}
+
+.botao:disabled {
+  opacity: 0.6;
+  cursor: progress;
+}
+
+.links {
+  margin: 1.5rem 0 0;
+  text-align: center;
+  color: var(--tinta-suave);
+  line-height: 2;
+}
+
+.links button {
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--azul-texto);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.links button:hover {
+  text-decoration: underline;
+}
+
+.erro,
+.aviso {
+  margin: 0;
+  padding: 0.85rem 1rem;
+  border-radius: var(--raio);
+  font-size: 0.95rem;
+}
+
+.erro {
+  background: var(--vermelho-fundo);
+  color: var(--vermelho);
+}
+
+.aviso {
+  background: var(--selo-fundo);
+  color: var(--selo-texto);
+}
+
+@media (max-width: 860px) {
+  .tela {
+    grid-template-columns: 1fr;
+  }
+
+  .lateral {
+    display: none;
+  }
+}

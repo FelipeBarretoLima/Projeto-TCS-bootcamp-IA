@@ -63,3 +63,37 @@
     padding: 1.25rem 1.1rem;
   }
 }
+
+.gravacao {
+  margin: 0;
+  padding: 0.85rem 1.75rem;
+  border-bottom: 1px solid var(--borda);
+  background: var(--selo-fundo);
+  color: var(--selo-texto);
+  font-weight: 600;
+}
+
+.tituloComAcao {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.verDashboard {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.65rem 1.3rem;
+  border-radius: 999px;
+  background: var(--azul);
+  color: #fff;
+  font-weight: 700;
+  text-decoration: none;
+  transition: background-color 0.15s ease-out;
+}
+
+.verDashboard:hover {
+  background: var(--azul-hover);
+}

@@ -15,5 +15,12 @@ uvicorn[standard]==0.54.0
 python-multipart==0.0.33
 httpx2==2.16.0
 
+# Banco de dados (PostgreSQL no Supabase)
+psycopg[binary,pool]==3.3.8
+
+# Assistente (LangChain + Gemini)
+langchain==1.4.9
+langchain-google-genai==4.4.3
+
 # Instala o próprio projeto (src/extrato) em modo editável
 -e .

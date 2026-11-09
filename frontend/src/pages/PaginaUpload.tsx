@@ -1,19 +1,33 @@
+import { ArrowRight } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
+import { Link } from 'react-router'
 import { ErroApi, enviaExtrato } from '../api/cliente'
-import type { ResultadoUpload } from '../api/tipos'
+import type { Gravacao, ResultadoImportacao } from '../api/tipos'
 import { ArquivoProcessado } from '../components/ArquivoProcessado'
 import { AvisoRejeicao } from '../components/AvisoRejeicao'
 import { ResumoExtracao } from '../components/ResumoExtracao'
 import { TabelaTransacoes } from '../components/TabelaTransacoes'
 import { ZonaUpload } from '../components/ZonaUpload'
-import { rotuloMotivo } from '../utils/formatacao'
+import { plural, rotuloMotivo } from '../utils/formatacao'
 import estilos from './PaginaUpload.module.css'
 
 type Estado =
   | { fase: 'inicial' }
   | { fase: 'enviando'; nome: string }
-  | { fase: 'concluido'; nome: string; resultado: ResultadoUpload }
+  | { fase: 'concluido'; nome: string; resultado: ResultadoImportacao }
   | { fase: 'erro'; mensagem: string }
+
+/** "12 transações novas salvas na sua conta. 3 já existiam de um extrato anterior e não foram contadas de novo." */
+function textoGravacao({ gravadas, repetidas }: Gravacao): string {
+  const novas =
+    gravadas > 0
+      ? `${plural(gravadas, 'transação nova salva', 'transações novas salvas')} na sua conta.`
+      : 'Nenhuma transação nova: todas já estavam na sua conta.'
+  if (repetidas === 0) return novas
+  const verbo = repetidas === 1 ? 'já existia' : 'já existiam'
+  const contada = repetidas === 1 ? 'foi contada' : 'foram contadas'
+  return `${novas} ${repetidas} ${verbo} de um extrato anterior e não ${contada} de novo.`
+}
 
 export function PaginaUpload() {
   const [estado, setEstado] = useState<Estado>({ fase: 'inicial' })
@@ -46,7 +60,8 @@ export function PaginaUpload() {
         <h1>Importar extrato</h1>
         <p>
           Arraste o PDF ou CSV do seu banco ou clique para selecionar. O arquivo é processado e
-          descartado na hora; a tabela mostra as transações já anonimizadas.
+          descartado na hora: só as transações, já anonimizadas, ficam salvas na sua conta para o
+          dashboard e o assistente.
         </p>
       </header>
 
@@ -72,8 +87,18 @@ export function PaginaUpload() {
             />
           ) : (
             <section className={estilos.painel} aria-labelledby="titulo-transacoes">
+              {estado.resultado.gravacao && (
+                <p className={estilos.gravacao} role="status">
+                  {textoGravacao(estado.resultado.gravacao)}
+                </p>
+              )}
               <div className={estilos.painelTopo}>
-                <h2 id="titulo-transacoes">Transações extraídas</h2>
+                <div className={estilos.tituloComAcao}>
+                  <h2 id="titulo-transacoes">Transações extraídas</h2>
+                  <Link to="/dashboard" className={estilos.verDashboard}>
+                    Ver dashboard <ArrowRight size={18} />
+                  </Link>
+                </div>
                 <ResumoExtracao
                   relatorio={estado.resultado.relatorio}
                   semCategoria={estado.resultado.sem_categoria}
