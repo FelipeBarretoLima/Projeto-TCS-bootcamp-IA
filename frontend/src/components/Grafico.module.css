@@ -1,0 +1,15 @@
+.figura {
+  margin: 0;
+  min-width: 0;
+}
+
+.titulo {
+  margin-bottom: 0.75rem;
+  font-weight: 700;
+  font-size: 0.95rem;
+}
+
+/* o Recharts desenha um contorno ao clicar; o foco visível fica para a navegação por teclado */
+.figura :global(.recharts-surface):focus:not(:focus-visible) {
+  outline: none;
+}

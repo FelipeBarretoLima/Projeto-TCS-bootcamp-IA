@@ -59,9 +59,10 @@ export function rotuloCategoria(categoria: string): string {
 const ORIGENS: Record<string, string> = {
   regra: 'regra fixa',
   mapa: 'mapa de estabelecimentos',
+  modelo: 'previsão do modelo',
 }
 
-/** De onde veio a categoria; null = nenhuma regra e fora do mapa. */
+/** De onde veio a categoria; null = nenhuma regra, fora do mapa e sem modelo. */
 export function rotuloOrigem(origem: string | null): string {
   return origem ? (ORIGENS[origem] ?? origem) : 'fora do mapa'
 }
@@ -124,4 +125,20 @@ export function rotuloMotivo(motivo: string): string {
     return `O arquivo tem algo fora do layout que o TAS conhece (${motivo}). ${ENVIE_ORIGINAL}`
   }
   return MOTIVOS[codigo] ?? motivo
+}
+
+/** 1234.5 -> "R$ 1.234,50" */
+export function formataMoeda(valor: number): string {
+  return moeda.format(valor)
+}
+
+/** 1234.5 -> "R$ 1,2 mil" (eixos de gráfico, onde não cabe o valor inteiro) */
+const compacto = new Intl.NumberFormat('pt-BR', {
+  style: 'currency',
+  currency: 'BRL',
+  notation: 'compact',
+  maximumFractionDigits: 1,
+})
+export function formataMoedaCurta(valor: number): string {
+  return compacto.format(valor)
 }

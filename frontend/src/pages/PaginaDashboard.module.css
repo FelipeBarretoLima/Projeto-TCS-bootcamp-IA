@@ -1,0 +1,101 @@
+.pagina {
+  display: grid;
+  gap: 1.5rem;
+}
+
+.topo h1 {
+  margin: 0;
+  font-size: 2.25rem;
+  line-height: 1.2;
+}
+
+.topo p {
+  margin: 0.35rem 0 0;
+  color: var(--tinta-suave);
+}
+
+.cartoes {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 1rem;
+}
+
+.cartao,
+.cartaoGrafico,
+.vazio {
+  border: 1px solid var(--borda);
+  border-radius: var(--raio-grande);
+  background: var(--superficie);
+  box-shadow: var(--sombra);
+}
+
+.cartao {
+  display: grid;
+  gap: 0.3rem;
+  padding: 1.25rem 1.4rem;
+}
+
+.cartao span {
+  color: var(--tinta-suave);
+  font-size: 0.9rem;
+}
+
+.cartao strong {
+  font-size: 1.6rem;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}
+
+.positivo {
+  color: var(--verde);
+}
+
+.negativo {
+  color: var(--vermelho);
+}
+
+.saldo {
+  color: var(--azul-texto);
+}
+
+.cartaoGrafico {
+  padding: 1.4rem 1.4rem 1rem;
+}
+
+.cartaoGrafico h2 {
+  margin: 0 0 1rem;
+  font-size: 1.1rem;
+}
+
+.vazio {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 1.4rem;
+}
+
+.vazio p {
+  margin: 0;
+  color: var(--tinta-suave);
+}
+
+.botao {
+  padding: 0.65rem 1.4rem;
+  border-radius: 999px;
+  background: var(--azul);
+  color: #fff;
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.botao:hover {
+  background: var(--azul-hover);
+}
+
+@media (max-width: 720px) {
+  .cartoes {
+    grid-template-columns: 1fr;
+  }
+}

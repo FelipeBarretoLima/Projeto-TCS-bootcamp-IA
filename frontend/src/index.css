@@ -33,6 +33,16 @@
   --azul-texto: #006cb4;
   --selo-fundo: #e6f0f8;
   --selo-texto: #042f54;
+  /* séries dos gráficos (1 = receitas, 2 = despesas, nos gráficos de duas séries) */
+  --grafico-1: #006eb8;
+  --grafico-2: #e5196a;
+  --grafico-3: #fe7b02;
+  --grafico-4: #7b12cf;
+  --grafico-5: #08804a;
+  --grafico-6: #c99a00;
+  --grafico-7: #0f9fb0;
+  --grafico-8: #8a94a3;
+  --grafico-grade: #e3e8ee;
   --verde: #08804a;
   --vermelho: #e4243c;
   --vermelho-fundo: #fdecee;
@@ -61,6 +71,15 @@
   --azul-texto: #6cb6f0;
   --selo-fundo: #16304d;
   --selo-texto: #cfe3f6;
+  --grafico-1: #3d9be0;
+  --grafico-2: #ff4f8f;
+  --grafico-3: #ff9a3c;
+  --grafico-4: #a95cf0;
+  --grafico-5: #3cc882;
+  --grafico-6: #f0c43c;
+  --grafico-7: #38c6d6;
+  --grafico-8: #8e9bb0;
+  --grafico-grade: #22344d;
   --verde: #3cc882;
   --vermelho: #ff5c70;
   --vermelho-fundo: #3a1820;
