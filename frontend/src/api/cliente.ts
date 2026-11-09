@@ -5,6 +5,9 @@ import { tokenAtual } from './supabase'
 import type {
   Conversa,
   ExtratoEnviado,
+  FiltrosTransacoes,
+  PeriodoTransacoes,
+  TransacaoSalva,
   Mensagem,
   Painel,
   RespostaChat,
@@ -64,6 +67,16 @@ export async function enviaExtrato(arquivo: File): Promise<ResultadoImportacao> 
 
 export const listaExtratos = () => chama<ExtratoEnviado[]>('/api/extratos')
 export const apagaExtrato = (id: string) => chama<void>(`/api/extratos/${id}`, { method: 'DELETE' })
+
+/** Transações salvas do usuário; filtros vazios são ignorados. */
+export function listaTransacoes(filtros: FiltrosTransacoes, signal?: AbortSignal): Promise<TransacaoSalva[]> {
+  const params = new URLSearchParams()
+  for (const [chave, valor] of Object.entries(filtros)) if (valor) params.set(chave, valor)
+  const consulta = params.toString()
+  return chama<TransacaoSalva[]>(`/api/transacoes${consulta ? `?${consulta}` : ''}`, { signal })
+}
+
+export const buscaPeriodo = () => chama<PeriodoTransacoes>('/api/transacoes/periodo')
 
 export const buscaPainel = () => chama<Painel>('/api/painel')
 

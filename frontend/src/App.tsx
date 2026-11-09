@@ -4,6 +4,7 @@ import { Cabecalho } from './components/Cabecalho'
 import { ProvedorAutenticacao } from './contexto/Autenticacao'
 import { useAutenticacao } from './contexto/contextoAuth'
 import { PaginaDashboard } from './pages/PaginaDashboard'
+import { PaginaExtrato } from './pages/PaginaExtrato'
 import { PaginaLogin } from './pages/PaginaLogin'
 import { PaginaUpload } from './pages/PaginaUpload'
 import estilos from './App.module.css'
@@ -29,6 +30,7 @@ function Rotas() {
     <Routes>
       <Route path="/login" element={<PaginaLogin />} />
       <Route path="/importar" element={<Protegida><PaginaUpload /></Protegida>} />
+      <Route path="/extrato" element={<Protegida><PaginaExtrato /></Protegida>} />
       <Route path="/dashboard" element={<Protegida><PaginaDashboard /></Protegida>} />
       <Route path="*" element={<Navigate to="/dashboard" replace />} />
     </Routes>

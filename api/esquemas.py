@@ -47,6 +47,28 @@ class Transacao(BaseModel):
     origem_categoria: Literal["regra", "mapa", "modelo"] | None = None
 
 
+class TransacaoSalva(BaseModel):
+    """Transação gravada na conta do usuário (aba Extrato). Não diz de onde veio a categoria."""
+
+    data: date
+    historico: str
+    contraparte: str
+    valor: Decimal
+    tipo: str
+    meio: str
+    banco: str
+    categoria: str | None
+
+
+class PeriodoTransacoes(BaseModel):
+    """Datas das transações do usuário e o filtro padrão da aba Extrato (None = nenhuma transação)."""
+
+    primeira: date | None
+    ultima: date | None
+    padrao_inicio: date | None  # início dos últimos 6 meses (ou a 1ª transação, se for depois)
+    padrao_fim: date | None  # a última transação
+
+
 class ResultadoUpload(BaseModel):
     relatorio: Relatorio
     transacoes: list[Transacao]

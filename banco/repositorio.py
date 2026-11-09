@@ -104,6 +104,34 @@ class Banco:
             "select data, historico, contraparte, valor, tipo, meio, banco, categoria from public.transacoes "
             "where usuario_id = %s order by data, id", usuario_id)
 
+    def periodo_transacoes(self, usuario_id: UUID) -> tuple[date | None, date | None]:
+        """Data da primeira e da última transação do usuário (None, None se não houver)."""
+        linha = self._uma("select min(data) as primeira, max(data) as ultima from public.transacoes "
+                          "where usuario_id = %s", usuario_id)
+        return linha["primeira"], linha["ultima"]
+
+    def busca_transacoes(self, usuario_id: UUID, *, inicio: date | None = None, fim: date | None = None,
+                         categoria: str | None = None, sem_categoria: bool = False) -> list[dict[str, Any]]:
+        """Transações do usuário para a aba Extrato, da mais recente para a mais antiga.
+
+        Filtros opcionais: período (inclusivo) e uma categoria, ou só as sem categoria.
+        """
+        condicoes, args = ["usuario_id = %s"], [usuario_id]
+        if inicio is not None:
+            condicoes.append("data >= %s")
+            args.append(inicio)
+        if fim is not None:
+            condicoes.append("data <= %s")
+            args.append(fim)
+        if sem_categoria:
+            condicoes.append("categoria is null")
+        elif categoria is not None:
+            condicoes.append("categoria = %s")
+            args.append(categoria)
+        return self._todas(
+            "select data, historico, contraparte, valor, tipo, meio, banco, categoria from public.transacoes "
+            f"where {' and '.join(condicoes)} order by data desc, id desc", *args)
+
     # --- conversas do assistente ---
 
     def lista_conversas(self, usuario_id: UUID) -> list[dict[str, Any]]:

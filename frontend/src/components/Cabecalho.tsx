@@ -21,6 +21,9 @@ export function Cabecalho() {
           <NavLink to="/importar" className={classeLink}>
             Importar extrato
           </NavLink>
+          <NavLink to="/extrato" className={classeLink}>
+            Extrato
+          </NavLink>
           <NavLink to="/dashboard" className={classeLink}>
             Dashboard
           </NavLink>

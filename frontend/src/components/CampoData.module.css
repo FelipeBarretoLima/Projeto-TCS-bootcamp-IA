@@ -1,0 +1,154 @@
+.campo {
+  position: relative;
+  display: grid;
+  gap: 0.35rem;
+  min-width: 11rem;
+}
+
+.campo > label {
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--tinta-suave);
+}
+
+.caixa {
+  display: flex;
+  align-items: center;
+  height: 2.75rem;
+  border: 1px solid var(--borda);
+  border-radius: var(--raio);
+  background: var(--fundo);
+}
+
+.caixa:focus-within {
+  outline: 2px solid var(--azul);
+  outline-offset: 2px;
+}
+
+.caixa input {
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+  padding: 0 0 0 0.85rem;
+  border: none;
+  background: transparent;
+  color: var(--tinta);
+  font: inherit;
+  font-variant-numeric: tabular-nums;
+  outline: none;
+}
+
+.caixa input::placeholder {
+  color: var(--tinta-suave);
+  opacity: 0.7;
+}
+
+.invalida {
+  border-color: var(--vermelho);
+}
+
+.erro {
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--vermelho);
+}
+
+.abrir {
+  display: grid;
+  place-items: center;
+  width: 2.5rem;
+  height: 100%;
+  padding: 0;
+  border: none;
+  border-radius: 0 var(--raio) var(--raio) 0;
+  background: transparent;
+  color: var(--tinta-suave);
+  cursor: pointer;
+}
+
+.abrir:hover,
+.abrir[aria-expanded='true'] {
+  color: var(--azul-texto);
+}
+
+.abrir:focus-visible {
+  outline: 2px solid var(--azul);
+  outline-offset: -2px;
+}
+
+/* --- calendário (react-day-picker) com as cores do tema --- */
+
+.calendario {
+  position: absolute;
+  top: calc(100% + 0.4rem);
+  left: 0;
+  z-index: 20;
+  padding: 0.75rem;
+  border: 1px solid var(--borda);
+  border-radius: var(--raio-grande);
+  background: var(--superficie);
+  color: var(--tinta);
+  box-shadow: 0 8px 32px rgb(13 27 45 / 0.16);
+  color-scheme: light dark;
+}
+
+.calendario :global(.rdp-root) {
+  --rdp-accent-color: var(--azul);
+  --rdp-accent-background-color: var(--selo-fundo);
+  --rdp-today-color: var(--azul-texto);
+  --rdp-day-height: 2.5rem;
+  --rdp-day-width: 2.5rem;
+  --rdp-day_button-height: 2.375rem;
+  --rdp-day_button-width: 2.375rem;
+  --rdp-nav_button-height: 2.25rem;
+  --rdp-nav_button-width: 2.25rem;
+  font-family: var(--fonte);
+  font-size: 0.9375rem;
+}
+
+.calendario :global(.rdp-selected .rdp-day_button) {
+  background: var(--azul);
+  color: #fff;
+  font-weight: 700;
+}
+
+.calendario :global(.rdp-day_button:hover:not([disabled])) {
+  background: var(--selo-fundo);
+}
+
+.calendario :global(.rdp-selected .rdp-day_button:hover) {
+  background: var(--azul-hover);
+}
+
+.calendario :global(.rdp-dropdown_root) {
+  font-weight: 700;
+}
+
+.calendario :global(.rdp-dropdown) {
+  background: var(--superficie);
+  color: var(--tinta);
+}
+
+.calendario :global(.rdp-chevron) {
+  fill: var(--azul-texto);
+}
+
+@media (max-width: 720px) {
+  .campo {
+    flex: 1 1 100%;
+    min-width: 0;
+  }
+
+  .calendario {
+    right: 0;
+    left: 0;
+    display: flex;
+    justify-content: center;
+    padding: 0.5rem;
+  }
+
+  .calendario :global(.rdp-root) {
+    --rdp-day-height: 2.4rem;
+    --rdp-day-width: 2.4rem;
+  }
+}
