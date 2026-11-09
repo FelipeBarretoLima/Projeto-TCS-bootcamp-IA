@@ -8,7 +8,9 @@ padronizado e anônimo e classifica cada transação numa categoria de gasto.
 ```
 extracao/      módulo de extração (parser): extratos -> CSV padronizado e anônimo
 ml/            módulo de ML: CSV do parser -> categoria de cada transação
-api/           API HTTP (FastAPI): expõe a extração e a categoria para o frontend
+api/           API HTTP (FastAPI): importação, dashboard, chat e login
+banco/         banco de dados (PostgreSQL no Supabase): tabelas e acesso
+agente/        Assistente TAS: consultas fixas (pandas) + Gemini (LangChain)
 frontend/      página web (React + TypeScript + Vite)
 data/          extratos reais e saídas (fora do git)
 ```
@@ -25,11 +27,28 @@ data/raw/  --(python -m extrato tudo)-->  data/saida/transacoes.csv  --(ml)-->  
 Fluxo pela página:
 
 ```
-navegador --(upload)--> api (POST /api/extratos) --> extração + categoria --> tabela na página
+login (Supabase Auth) --> upload --> api: extração + categoria --> transações salvas no banco
+dashboard / chat --> api: consultas fixas sobre as transações do usuário --> números + gráfico
 ```
 
-O arquivo enviado pela página é processado numa pasta temporária e apagado em seguida: nada fica
-gravado no servidor.
+O arquivo enviado pela página é processado numa pasta temporária e apagado em seguida: só as
+transações extraídas (já anonimizadas) ficam salvas, na conta de quem enviou. Uma compra que
+aparece em dois extratos com períodos sobrepostos entra uma vez só (`banco/deduplicacao.py`).
+
+O assistente nunca faz contas nem vê a lista de transações: o Gemini escolhe uma das consultas de
+`agente/consultas.py`, que calcula com pandas e devolve só os totais e os dados do gráfico.
+
+## Arquivo `.env` (raiz, fora do git)
+
+| Variável | Onde pegar |
+|---|---|
+| `DATABASE_URL` | Supabase > **Connect** > **Session pooler** > URI (senha no lugar de `[YOUR-PASSWORD]`, sem colchetes) |
+| `SUPABASE_PUBLISHABLE_KEY` | Supabase > **Project Settings** > **API Keys** > Publishable key (`sb_publishable_...`) |
+| `GEMINI_API_KEY` | aistudio.google.com > **Get API key** |
+| `GEMINI_MODEL` | opcional; padrão `gemini-3.1-flash-lite` |
+
+`SUPABASE_URL` é deduzido do `DATABASE_URL`. Nunca faça commit do `.env` nem cole o conteúdo dele
+em chats.
 
 ## Pré-requisito
 
@@ -79,10 +98,26 @@ npm install      # só na primeira vez
 npm run dev
 ```
 
-Abra http://localhost:5173 e envie um extrato. O frontend precisa de **Node.js 22** (ou 20.19+).
+Abra http://localhost:5173, crie uma conta, importe um extrato e converse com o assistente no
+dashboard. O frontend precisa de **Node.js 22** (ou 20.19+). Antes da primeira vez, preencha o
+`.env` (acima) e crie as tabelas (abaixo). Depois de mudar o `.env`, reinicie a API.
 
 A API lê (sem gravar) os mapas de `data/privado/` para anonimizar e categorizar igual à linha de
-comando. Sem essa pasta, a categoria vem só das regras fixas.
+comando. A categoria vem, nesta ordem, da regra fixa, do mapa de estabelecimentos e, para o que
+sobrar, do classificador `ml/modelos/svm_tfidf.pkl` (gerado por `python -m ml.treinar`). Sem o mapa
+ou sem o `.pkl`, o passo correspondente é pulado.
+
+## Banco de dados (Supabase)
+
+PostgreSQL no Supabase. Login e senha ficam no Supabase Auth; as tabelas do projeto (`usuarios`,
+`extratos`, `transacoes`, `conversas`, `mensagens`) estão em `banco/migracoes/`.
+
+1. Crie um arquivo `.env` na raiz (fora do git) com `DATABASE_URL=` + a connection string do
+   Supabase (botão **Connect** > **Session pooler** > URI, com a senha no lugar de `[YOUR-PASSWORD]`,
+   sem os colchetes).
+2. Rode `python -m banco.migrar` para criar ou atualizar as tabelas (`--status` só mostra o que falta).
+
+Para mudar o banco, crie uma migração nova (`0002_...sql`); nunca edite uma já aplicada.
 
 ## Testes
 
@@ -90,8 +125,10 @@ comando. Sem essa pasta, a categoria vem só das regras fixas.
 pytest
 ```
 
-Roda os testes de `extracao/tests`, `ml/tests` e `api/tests`. As fixtures de teste são sempre
-inventadas: nunca copie conteúdo de extrato real para os testes.
+Roda os testes de `extracao/tests`, `ml/tests`, `api/tests`, `banco/tests` e `agente/tests`, sem
+internet: o banco, o login e o Gemini são trocados por versões falsas. Para testar também contra o
+banco de verdade (numa transação desfeita no fim, nada fica gravado): `TESTE_BANCO=1 pytest`.
+As fixtures de teste são sempre inventadas: nunca copie conteúdo de extrato real para os testes.
 
 ## Dados e privacidade
 
