@@ -97,3 +97,19 @@
 .verDashboard:hover {
   background: var(--azul-hover);
 }
+
+.verExtratos {
+  padding: 0.5rem 1.1rem;
+  border: 1px solid var(--vermelho);
+  border-radius: 999px;
+  background: var(--superficie);
+  color: var(--tinta);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background-color 0.15s ease-out;
+}
+
+.verExtratos:hover {
+  background: var(--fundo);
+}

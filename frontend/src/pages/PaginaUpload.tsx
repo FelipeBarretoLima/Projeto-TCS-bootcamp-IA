@@ -5,6 +5,7 @@ import { ErroApi, enviaExtrato } from '../api/cliente'
 import type { Gravacao, ResultadoImportacao } from '../api/tipos'
 import { ArquivoProcessado } from '../components/ArquivoProcessado'
 import { AvisoRejeicao } from '../components/AvisoRejeicao'
+import { ListaExtratos } from '../components/ListaExtratos'
 import { ResumoExtracao } from '../components/ResumoExtracao'
 import { TabelaTransacoes } from '../components/TabelaTransacoes'
 import { ZonaUpload } from '../components/ZonaUpload'
@@ -15,7 +16,7 @@ type Estado =
   | { fase: 'inicial' }
   | { fase: 'enviando'; nome: string }
   | { fase: 'concluido'; nome: string; resultado: ResultadoImportacao }
-  | { fase: 'erro'; mensagem: string }
+  | { fase: 'erro'; mensagem: string; repetido: boolean }
 
 /** "12 transações novas salvas na sua conta. 3 já existiam de um extrato anterior e não foram contadas de novo." */
 function textoGravacao({ gravadas, repetidas }: Gravacao): string {
@@ -32,6 +33,15 @@ function textoGravacao({ gravadas, repetidas }: Gravacao): string {
 export function PaginaUpload() {
   const [estado, setEstado] = useState<Estado>({ fase: 'inicial' })
   const resultadoRef = useRef<HTMLDivElement>(null)
+  // muda a cada importação gravada: a lista de extratos importados recarrega
+  const [versaoExtratos, setVersaoExtratos] = useState(0)
+
+  function verExtratos() {
+    const reduzido = window.matchMedia('(prefers-reduced-motion: reduce)').matches
+    document
+      .getElementById('extratos-importados')
+      ?.scrollIntoView({ behavior: reduzido ? 'auto' : 'smooth', block: 'start' })
+  }
 
   // quando o resultado chega, leva o arquivo processado para a vista
   useEffect(() => {
@@ -45,12 +55,14 @@ export function PaginaUpload() {
     try {
       const resultado = await enviaExtrato(arquivo)
       setEstado({ fase: 'concluido', nome: arquivo.name, resultado })
+      if (resultado.gravacao) setVersaoExtratos((v) => v + 1)
     } catch (erro) {
       const mensagem =
         erro instanceof ErroApi
           ? erro.message
           : 'Não foi possível falar com a API. Confira se ela está rodando e tente de novo.'
-      setEstado({ fase: 'erro', mensagem })
+      // 409 = o mesmo arquivo já foi importado (POST /extratos)
+      setEstado({ fase: 'erro', mensagem, repetido: erro instanceof ErroApi && erro.status === 409 })
     }
   }
 
@@ -73,7 +85,20 @@ export function PaginaUpload() {
       />
 
       {estado.fase === 'erro' && (
-        <AvisoRejeicao titulo="Não foi possível enviar" mensagem={estado.mensagem} />
+        <AvisoRejeicao
+          titulo="Não foi possível enviar"
+          mensagem={
+            estado.repetido
+              ? `${estado.mensagem}. Para importar de novo, exclua o extrato anterior na lista abaixo.`
+              : estado.mensagem
+          }
+        >
+          {estado.repetido && (
+            <button type="button" className={estilos.verExtratos} onClick={verExtratos}>
+              Ver extratos importados
+            </button>
+          )}
+        </AvisoRejeicao>
       )}
 
       {estado.fase === 'concluido' && (
@@ -109,6 +134,14 @@ export function PaginaUpload() {
           )}
         </div>
       )}
+
+      <ListaExtratos
+        versao={versaoExtratos}
+        onExcluido={() => {
+          // o extrato que travava a importação saiu: o aviso de "já importado" não vale mais
+          if (estado.fase === 'erro' && estado.repetido) setEstado({ fase: 'inicial' })
+        }}
+      />
     </div>
   )
 }

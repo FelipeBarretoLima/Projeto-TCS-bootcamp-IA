@@ -1,0 +1,150 @@
+.painel {
+  overflow: hidden;
+  border: 1px solid var(--borda);
+  border-radius: var(--raio-grande);
+  background: var(--superficie);
+  box-shadow: var(--sombra);
+  /* não esconder o topo sob o cabeçalho fixo ao rolar até aqui */
+  scroll-margin-top: 6rem;
+}
+
+.topo {
+  padding: 1.4rem 1.75rem 1rem;
+}
+
+.topo h2 {
+  font-size: 1.375rem;
+  font-weight: 700;
+}
+
+.topo p {
+  margin: 0.35rem 0 0;
+  color: var(--tinta-suave);
+}
+
+.lista {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.item {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.9rem;
+  padding: 1rem 1.75rem;
+  border-top: 1px solid var(--borda);
+}
+
+.icone {
+  flex: none;
+  color: var(--tinta-suave);
+}
+
+.info {
+  flex: 1;
+  min-width: 12rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+
+.nome {
+  font-weight: 700;
+  overflow-wrap: anywhere;
+}
+
+.detalhes {
+  font-size: 0.9375rem;
+  color: var(--tinta-suave);
+}
+
+.excluir,
+.cancelar,
+.confirmar {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.5rem 1rem;
+  border-radius: 999px;
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+  transition:
+    background-color 0.15s ease-out,
+    color 0.15s ease-out,
+    border-color 0.15s ease-out;
+}
+
+.excluir {
+  border: 1px solid var(--borda);
+  background: none;
+  color: var(--tinta-suave);
+}
+
+.excluir:hover {
+  border-color: var(--vermelho);
+  color: var(--vermelho);
+}
+
+.confirmacao {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.6rem;
+}
+
+.confirmacao span {
+  font-size: 0.9375rem;
+  color: var(--tinta);
+}
+
+.cancelar {
+  border: 1px solid var(--borda);
+  background: none;
+  color: var(--tinta);
+}
+
+.cancelar:hover {
+  background: var(--fundo);
+}
+
+.confirmar {
+  border: 1px solid var(--vermelho);
+  background: var(--vermelho);
+  color: #fff;
+}
+
+.confirmar:hover {
+  filter: brightness(0.92);
+}
+
+.cancelar:disabled,
+.confirmar:disabled {
+  cursor: progress;
+  opacity: 0.7;
+}
+
+.vazio,
+.erro {
+  margin: 0;
+  padding: 1rem 1.75rem 1.4rem;
+  border-top: 1px solid var(--borda);
+  color: var(--tinta-suave);
+}
+
+.erro {
+  background: var(--vermelho-fundo);
+  color: var(--tinta);
+}
+
+@media (max-width: 720px) {
+  .topo,
+  .item,
+  .vazio,
+  .erro {
+    padding-left: 1.1rem;
+    padding-right: 1.1rem;
+  }
+}
