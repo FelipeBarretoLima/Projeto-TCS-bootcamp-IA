@@ -56,16 +56,8 @@ export function rotuloCategoria(categoria: string): string {
   return CATEGORIAS[categoria] ?? categoria
 }
 
-const ORIGENS: Record<string, string> = {
-  regra: 'regra fixa',
-  mapa: 'mapa de estabelecimentos',
-  modelo: 'previsão do modelo',
-}
-
-/** De onde veio a categoria; null = nenhuma regra, fora do mapa e sem modelo. */
-export function rotuloOrigem(origem: string | null): string {
-  return origem ? (ORIGENS[origem] ?? origem) : 'fora do mapa'
-}
+/** As 8 categorias na ordem de exibição: [código, rótulo] (filtro da aba Extrato). */
+export const LISTA_CATEGORIAS = Object.entries(CATEGORIAS)
 
 /** "1 transação", "3 transações" */
 export function plural(n: number, singular: string, plural: string): string {

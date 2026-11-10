@@ -1,10 +1,11 @@
-import type { Transacao } from '../api/tipos'
+import type { TransacaoSalva } from '../api/tipos'
 import { formataData, formataValor, rotuloContraparte, rotuloMeio } from '../utils/formatacao'
 import { BadgeCategoria } from './BadgeCategoria'
 import estilos from './TabelaTransacoes.module.css'
 
 type Props = {
-  transacoes: Transacao[]
+  // a importação passa Transacao (com origem), a aba Extrato passa TransacaoSalva: a tabela só usa o comum
+  transacoes: TransacaoSalva[]
 }
 
 export function TabelaTransacoes({ transacoes }: Props) {
@@ -39,7 +40,7 @@ export function TabelaTransacoes({ transacoes }: Props) {
                 </span>
               </td>
               <td className={estilos.categoria}>
-                <BadgeCategoria categoria={t.categoria} origem={t.origem_categoria} />
+                <BadgeCategoria categoria={t.categoria} />
               </td>
               <td className={`${estilos.numero} ${estilos[t.tipo]}`}>{formataValor(t.valor)}</td>
             </tr>

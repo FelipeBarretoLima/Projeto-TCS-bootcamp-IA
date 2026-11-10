@@ -30,6 +30,23 @@ export type Transacao = {
   origem_categoria: 'regra' | 'mapa' | 'modelo' | null
 }
 
+/** Transação gravada na conta (aba Extrato): sem a origem da categoria. */
+export type TransacaoSalva = Omit<Transacao, 'origem_categoria'>
+
+/** Datas das transações do usuário e o filtro padrão (últimos 6 meses). null = nenhuma transação. */
+export type PeriodoTransacoes = {
+  primeira: string | null
+  ultima: string | null
+  padrao_inicio: string | null
+  padrao_fim: string | null
+}
+
+export type FiltrosTransacoes = {
+  inicio?: string // AAAA-MM-DD, inclusiva
+  fim?: string // AAAA-MM-DD, inclusiva
+  categoria?: string // uma das 8 categorias ou 'sem_categoria'
+}
+
 export type ResultadoUpload = {
   relatorio: Relatorio
   transacoes: Transacao[]

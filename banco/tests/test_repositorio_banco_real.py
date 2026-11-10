@@ -64,3 +64,28 @@ def test_fluxo_completo(db):
 
     assert db.apaga_extrato(u, g1.extrato_id)
     assert len(db.transacoes(u)) == 2
+
+
+def test_busca_transacoes_com_filtros(db):
+    u, outro = _usuario(db), _usuario(db)
+    sem = {**_t(20, "-1.00"), "categoria": None, "origem_categoria": None}
+    mercado = {**_t(5, "-2.00"), "categoria": "mercado"}
+    db.grava_extrato(u, nome_arquivo="a.csv", hash_arquivo="h1", parser="p", periodo_inicio=None,
+                     periodo_fim=None, transacoes=[_t(2), mercado, sem])
+    db.grava_extrato(outro, nome_arquivo="b.csv", hash_arquivo="h1", parser="p", periodo_inicio=None,
+                     periodo_fim=None, transacoes=[_t(9)])
+
+    assert [t["data"].day for t in db.busca_transacoes(u)] == [20, 5, 2]
+    assert [t["data"].day for t in db.busca_transacoes(u, inicio=date(2024, 1, 3), fim=date(2024, 1, 20))] == [20, 5]
+    assert [t["data"].day for t in db.busca_transacoes(u, categoria="transporte")] == [2]
+    assert [t["data"].day for t in db.busca_transacoes(u, sem_categoria=True)] == [20]
+    assert db.busca_transacoes(u, fim=date(2024, 1, 4), categoria="mercado") == []
+    assert "origem_categoria" not in db.busca_transacoes(u)[0]
+
+
+def test_periodo_transacoes(db):
+    u = _usuario(db)
+    assert db.periodo_transacoes(u) == (None, None)
+    db.grava_extrato(u, nome_arquivo="a.csv", hash_arquivo="h1", parser="p", periodo_inicio=None,
+                     periodo_fim=None, transacoes=[_t(9), _t(2, "-1.00"), _t(30, "-2.00")])
+    assert db.periodo_transacoes(u) == (date(2024, 1, 2), date(2024, 1, 30))

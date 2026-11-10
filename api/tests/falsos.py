@@ -54,6 +54,20 @@ class BancoFalso:
     def transacoes(self, usuario_id):
         return [t for t in self.linhas if t["usuario_id"] == usuario_id]
 
+    def periodo_transacoes(self, usuario_id):
+        datas = [t["data"] for t in self.linhas if t["usuario_id"] == usuario_id]
+        return (min(datas), max(datas)) if datas else (None, None)
+
+    def busca_transacoes(self, usuario_id, *, inicio=None, fim=None, categoria=None, sem_categoria=False):
+        def passa(t):
+            return (t["usuario_id"] == usuario_id
+                    and (inicio is None or t["data"] >= inicio)
+                    and (fim is None or t["data"] <= fim)
+                    and (t["categoria"] is None if sem_categoria
+                         else categoria is None or t["categoria"] == categoria))
+        achadas = [t for t in self.linhas if passa(t)]
+        return sorted(achadas, key=lambda t: t["data"], reverse=True)
+
     def lista_conversas(self, usuario_id):
         return sorted((c for c in self.conversas.values() if c["usuario_id"] == usuario_id),
                       key=lambda c: c["atualizada_em"], reverse=True)

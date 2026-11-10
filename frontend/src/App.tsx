@@ -1,17 +1,17 @@
 import type { ReactNode } from 'react'
-import { BrowserRouter, Navigate, Route, Routes, useLocation } from 'react-router'
+import { BrowserRouter, Navigate, Route, Routes } from 'react-router'
 import { Cabecalho } from './components/Cabecalho'
 import { ProvedorAutenticacao } from './contexto/Autenticacao'
 import { useAutenticacao } from './contexto/contextoAuth'
 import { PaginaDashboard } from './pages/PaginaDashboard'
+import { PaginaExtrato } from './pages/PaginaExtrato'
 import { PaginaLogin } from './pages/PaginaLogin'
 import { PaginaUpload } from './pages/PaginaUpload'
 import estilos from './App.module.css'
 
-/** Páginas que exigem login: sem sessão, vai para /login (e volta depois de entrar). */
+/** Páginas que exigem login: sem sessão, vai para /login (depois de entrar, abre Importar extrato). */
 function Protegida({ children }: { children: ReactNode }) {
   const { estado } = useAutenticacao()
-  const local = useLocation()
   if (estado.fase === 'carregando') return <p className={estilos.carregando}>Carregando…</p>
   if (estado.fase === 'pronto' && estado.sessao) {
     return (
@@ -21,7 +21,7 @@ function Protegida({ children }: { children: ReactNode }) {
       </>
     )
   }
-  return <Navigate to="/login" replace state={{ de: local.pathname }} />
+  return <Navigate to="/login" replace />
 }
 
 function Rotas() {
@@ -29,8 +29,9 @@ function Rotas() {
     <Routes>
       <Route path="/login" element={<PaginaLogin />} />
       <Route path="/importar" element={<Protegida><PaginaUpload /></Protegida>} />
+      <Route path="/extrato" element={<Protegida><PaginaExtrato /></Protegida>} />
       <Route path="/dashboard" element={<Protegida><PaginaDashboard /></Protegida>} />
-      <Route path="*" element={<Navigate to="/dashboard" replace />} />
+      <Route path="*" element={<Navigate to="/importar" replace />} />
     </Routes>
   )
 }

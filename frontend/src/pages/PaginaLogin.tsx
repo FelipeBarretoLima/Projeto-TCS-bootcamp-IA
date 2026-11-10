@@ -1,6 +1,6 @@
 import { Moon, Sun } from 'lucide-react'
 import { useState, type FormEvent } from 'react'
-import { Navigate, useLocation } from 'react-router'
+import { Navigate } from 'react-router'
 import { Marca } from '../components/Marca'
 import { useAutenticacao } from '../contexto/contextoAuth'
 import { useTema } from '../hooks/useTema'
@@ -17,7 +17,6 @@ const TITULOS: Record<Modo, [string, string]> = {
 export function PaginaLogin() {
   const { estado, entra, cadastra, recupera } = useAutenticacao()
   const { tema, alterna } = useTema()
-  const local = useLocation()
   const [modo, setModo] = useState<Modo>('entrar')
   const [nome, setNome] = useState('')
   const [email, setEmail] = useState('')
@@ -27,8 +26,8 @@ export function PaginaLogin() {
   const [aviso, setAviso] = useState<string | null>(null)
 
   if (estado.fase === 'pronto' && estado.sessao) {
-    const destino = (local.state as { de?: string } | null)?.de ?? '/dashboard'
-    return <Navigate to={destino} replace />
+    // ao entrar, sempre começa por Importar extrato
+    return <Navigate to="/importar" replace />
   }
 
   function troca(novo: Modo) {
