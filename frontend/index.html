@@ -6,11 +6,11 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>TAS – Transactions Assistancy Service</title>
     <script>
-      // aplica o tema salvo antes da primeira pintura (evita piscar no tema errado)
+      // aplica o tema antes da primeira pintura (evita piscar no tema errado).
+      // Padrão: claro; escuro só se o usuário escolheu no botão (mesma chave de src/hooks/useTema.ts)
+      document.documentElement.dataset.tema = 'claro'
       try {
-        const salvo = localStorage.getItem('tas-tema')
-        const escuro = salvo ? salvo === 'escuro' : matchMedia('(prefers-color-scheme: dark)').matches
-        document.documentElement.dataset.tema = escuro ? 'escuro' : 'claro'
+        if (localStorage.getItem('tas-tema-escolhido') === 'escuro') document.documentElement.dataset.tema = 'escuro'
       } catch {}
     </script>
   </head>

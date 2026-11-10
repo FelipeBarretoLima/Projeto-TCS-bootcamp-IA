@@ -1,15 +1,19 @@
-// Tema claro/escuro: começa pela preferência do sistema e lembra a escolha do usuário.
+// Tema claro/escuro: o padrão é o claro; o escuro só vale quando o usuário escolhe no botão.
+// (Não segue o tema do sistema.) A escolha fica salva no navegador.
 
 import { useEffect, useState } from 'react'
 
 export type Tema = 'claro' | 'escuro'
 
-const CHAVE = 'tas-tema'
+// chave nova: a antiga ('tas-tema') guardava o tema do sistema mesmo sem o usuário escolher
+const CHAVE = 'tas-tema-escolhido'
 
 function temaInicial(): Tema {
-  const salvo = localStorage.getItem(CHAVE)
-  if (salvo === 'claro' || salvo === 'escuro') return salvo
-  return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'escuro' : 'claro'
+  try {
+    return localStorage.getItem(CHAVE) === 'escuro' ? 'escuro' : 'claro'
+  } catch {
+    return 'claro'
+  }
 }
 
 export function useTema() {
@@ -17,9 +21,16 @@ export function useTema() {
 
   useEffect(() => {
     document.documentElement.dataset.tema = tema
-    localStorage.setItem(CHAVE, tema)
   }, [tema])
 
-  const alterna = () => setTema((t) => (t === 'claro' ? 'escuro' : 'claro'))
+  const alterna = () => {
+    const novo: Tema = tema === 'claro' ? 'escuro' : 'claro'
+    setTema(novo)
+    try {
+      localStorage.setItem(CHAVE, novo) // só grava quando o usuário escolhe
+    } catch {
+      // sem localStorage: o tema vale só até recarregar a página
+    }
+  }
   return { tema, alterna }
 }
