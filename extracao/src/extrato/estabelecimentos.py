@@ -54,7 +54,32 @@ _EMPRESA_RADICAL = re.compile(
     r"QUITANDA|ATACAD|VAREJO|CENTER|SHOP|STORE|IFOOD|UBER|SHPP|TELECOM|ENERGIA|GAS\b|AGUA|ESPORT|SPORT|GAMES|"
     r"TECNOLOG|INFORMAT|CELULAR|ELETRO|MATERIA|CONSTRU|FERRAG|TINTAS|MADEIR|VIDRA|ESTOFAD|COLCHO|MOVEIS|"
     r"PRESENTE|UTILIDADE|VARIEDADE|ARTIGO|IMPORT|EXPORT|GRAFIC|COPIA|XEROX|CHAVEIRO|LAVANDER|LAVA|AUTOPEC|"
-    r"MECANIC|BORRACH|PNEU|COMBUST|PEDAGIO|PARK|ESCOLA|CURSO|IGREJA|ASSOC|CLUBE|BANCO|SEGURO|CREDITO|PAGAMENT")
+    r"MECANIC|BORRACH|PNEU|COMBUST|PEDAGIO|PARK|ESCOLA|CURSO|IGREJA|ASSOC|CLUBE|BANCO|SEGURO|CREDITO|PAGAMENT|"
+    # razão social sem LTDA/CNPJ (vista em PIX do Inter): "... COMPANHIA BRASILEIRA DE ...", "COMERCIO DE VESTUARIO"
+    r"COMPANHIA|BRASILEIR|NACIONAL|VESTUAR|BRICOL|EMPREEND|PARTICIPAC|HOLDING|GRUPO|ADMINISTR|CONSULT|"
+    r"ASSESSOR|ENGENH|INSTITUT|FUNDAC|COOPERAT|SINDICAT|SOLUC|SISTEMAS|"
+    # órgãos e instituições ("UNIVERSIDADE ESTADUAL DE LONDRINA")
+    r"UNIVERSIDADE|FACULDADE|COLEGIO|ESTADUAL|MUNICIPAL|FEDERAL|PREFEITURA|SECRETARIA|GOVERNO|HOSPITAL")
+
+
+def parece_empresa_pelo_nome(nome: str) -> bool:
+    """Para PIX/TED sem CNPJ nem LTDA: o nome é de empresa? Nunca, se começar com primeiro nome.
+
+    Empresa quando NÃO começa com primeiro nome de pessoa e
+      - tem palavra de empresa/ramo: "BAR E RESTAURANTE VALENTINO", "UNIVERSIDADE ESTADUAL DE
+        LONDRINA", "LEROY MERLIN COMPANHIA BRASILEIRA DE BRICOLAGEM"; ou
+      - é uma palavra só: "CHEERS" (no PIX, pessoa vem sempre com nome e sobrenome).
+    "JOAO SILVA LANCHES" (MEI com o nome do dono) e "MARIA" continuam pessoa.
+    """
+    c = sem_acento(nome).upper()
+    tokens = c.split()
+    if not tokens:
+        return False
+    if re.sub(r"[^A-Z]", "", tokens[0]) in _primeiros_nomes():
+        return False
+    if _EMPRESA_PALAVRA.search(c) or _EMPRESA_RADICAL.search(c):
+        return True
+    return len(tokens) == 1 and len(re.sub(r"[^A-Z]", "", c)) >= 3
 
 
 def parece_pessoa(nome: str) -> bool:

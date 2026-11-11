@@ -155,3 +155,30 @@ def test_pessoa_so_com_cpf_vira_pessoa_fisica():
 
 def test_cnpj_com_espaco_no_lugar_da_barra():
     assert limpo("LOJA TESTE 12.345.678 0001-90") == "LOJA TESTE"
+
+
+# --- PIX/TED para empresa sem CNPJ nem LTDA (razão social escrita por extenso) ---
+
+@pytest.mark.parametrize("nome", [
+    "BAR E RESTAURANTE VALENTINO",
+    "CIENA COMERCIO DE VESTUARIO",
+    "LEROY MERLIN COMPANHIA BRASILEIRA DE BRICOLAGEM",
+    "UNIVERSIDADE ESTADUAL DE LONDRINA",
+    "CHEERS",                  # uma palavra só, que não é primeiro nome
+])
+def test_pix_para_empresa_sem_cnpj_mantem_o_nome(nome):
+    assert classifica(nome, "", Meio.PIX) is Classe.EMPRESA
+    assert resolve_contraparte(nome, "", Meio.PIX, None) == nome
+
+
+@pytest.mark.parametrize("nome", [
+    "MARIA SILVA SANTOS",
+    "JOAO BARBOSA",            # "BAR" dentro do sobrenome não é palavra de empresa
+    "FREDERICO ALVES",         # "REDE" dentro do nome
+    "JOAO SILVA LANCHES",      # MEI com o nome do dono: começa com primeiro nome -> continua protegido
+    "ANA PAULA COMERCIO",
+    "MARIA",                   # uma palavra só, mas é primeiro nome
+    "JHONATAN",
+])
+def test_pix_para_pessoa_continua_pessoa_fisica(nome):
+    assert resolve_contraparte(nome, "", Meio.PIX, None) == PESSOA_FISICA

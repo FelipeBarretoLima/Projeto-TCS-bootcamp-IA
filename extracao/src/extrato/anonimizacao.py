@@ -9,7 +9,10 @@ Regras de contraparte (determinísticas, na ordem):
      exceto se o nome tiver marcador de empresa                     -> ambíguo
   3. CNPJ ou marcador de empresa (LTDA, S.A., S/A, EIRELI, CIA)     -> empresa
   4. Sem documento nem marcador, em PIX/TED/transferência/boleto   -> PESSOA_FISICA
-     (na dúvida, o token fixo nunca vaza nada)
+     (na dúvida, o token fixo nunca vaza nada), exceto se o nome não começar com primeiro nome de
+     pessoa e tiver palavra de empresa ou for uma palavra só -> empresa
+     (`estabelecimentos.parece_empresa_pelo_nome`; ex.: "BAR E RESTAURANTE X", "CHEERS",
+     "UNIVERSIDADE ESTADUAL DE LONDRINA")
   5. Sem documento nem marcador, nos demais meios (cartão…)        -> empresa
 O nome de empresa passa por `padroes.remove` (documentos, contas, nomes do titular…).
 """
@@ -21,6 +24,7 @@ from dataclasses import dataclass
 from enum import StrEnum
 
 from . import padroes
+from .estabelecimentos import parece_empresa_pelo_nome
 from .modelos import PESSOA_FISICA, Meio
 from .normalizacao import normaliza_texto
 
@@ -68,7 +72,9 @@ def classifica(nome: str, documento: str, meio: Meio) -> Classe:
         return Classe.AMBIGUO if empresa else Classe.PESSOA_FISICA
     if cnpj or empresa:
         return Classe.EMPRESA
-    return Classe.PESSOA_FISICA if meio in _MEIOS_DE_TRANSFERENCIA else Classe.EMPRESA
+    if meio in _MEIOS_DE_TRANSFERENCIA:
+        return Classe.EMPRESA if parece_empresa_pelo_nome(nome_n) else Classe.PESSOA_FISICA
+    return Classe.EMPRESA
 
 
 # intermediários de maquininha/pagamento: o que vem depois do nome deles é o vendedor (muitas vezes
