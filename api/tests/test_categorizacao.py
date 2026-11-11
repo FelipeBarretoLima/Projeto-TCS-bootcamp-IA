@@ -1,4 +1,4 @@
-"""Categoria na API (regras + mapa + classificador). Dados inventados."""
+"""Categoria na API: entradas = receitas (regra), saídas = classificador. Dados inventados."""
 
 import csv
 from datetime import date
@@ -53,50 +53,35 @@ CASOS = [
 ]
 
 
-def test_mesma_categoria_que_o_modulo_ml(dir_privado):
-    _grava_mapa(dir_privado, [{"contraparte": "PADARIA MODELO", "classe": "mercado"}])
-    mapa = rotular.carrega_mapa(dir_privado)
-    resultado = categoriza(_resultado(*CASOS))
-    for t in resultado.transacoes:
-        esperado = rotular.categoria(t.model_dump(mode="json"), mapa)
-        assert t.categoria == (esperado.value if esperado else None)
-
-
-def test_origem_da_categoria(dir_privado):
-    _grava_mapa(dir_privado, [{"contraparte": "PADARIA MODELO", "classe": "mercado"}])
-    tarifa, _, _, _, padaria, loja, empresa = categoriza(_resultado(*CASOS)).transacoes
-    assert (tarifa.categoria, tarifa.origem_categoria) == ("financeiro", "regra")
-    assert (padaria.categoria, padaria.origem_categoria) == ("mercado", "mapa")
-    assert (loja.categoria, loja.origem_categoria) == (None, None)
-    assert (empresa.categoria, empresa.origem_categoria) == (None, None)
+def test_entrada_e_receita_por_regra_e_saida_sem_modelo_fica_sem_categoria():
+    tarifa, pix_recebido, *saidas = categoriza(_resultado(*CASOS)).transacoes
+    assert (pix_recebido.categoria, pix_recebido.origem_categoria) == ("receitas", "regra")
+    # sem o .pkl, nenhuma saída tem categoria: nem a tarifa, que antes era regra fixa
+    assert all((t.categoria, t.origem_categoria) == (None, None) for t in [tarifa, *saidas])
 
 
 def test_conta_sem_categoria():
-    # sem mapa: só as 4 primeiras (regras) têm categoria
-    assert categoriza(_resultado(*CASOS)).sem_categoria == 3
+    assert categoriza(_resultado(*CASOS)).sem_categoria == 6  # só a entrada tem categoria
 
 
-def test_upload_devolve_categoria(dir_privado):
+def test_mapa_de_estabelecimentos_nao_e_usado_na_api(dir_privado):
+    # o mapa só gera rótulos para o treino; na API quem decide as saídas é o modelo
     _grava_mapa(dir_privado, [{"contraparte": "PADARIA MODELO", "classe": "mercado"}])
     csv_ = (f"{CAB}02/01/2024,-12.50,{U1},Compra no débito - PADARIA MODELO\n").encode()
     r = TestClient(app).post("/api/extratos", files={"arquivo": ("e.csv", csv_)})
     assert r.status_code == 200
-    corpo = r.json()
-    [t] = corpo["transacoes"]
-    assert (t["categoria"], t["origem_categoria"]) == ("mercado", "mapa")
-    assert corpo["sem_categoria"] == 0
+    [t] = r.json()["transacoes"]
+    assert (t["categoria"], t["origem_categoria"]) == (None, None)
+    assert r.json()["sem_categoria"] == 1
 
 
-def test_mapa_com_classe_invalida_vira_erro_500(dir_privado):
+def test_mapa_invalido_nao_derruba_a_importacao(dir_privado):
     _grava_mapa(dir_privado, [{"contraparte": "PADARIA MODELO", "classe": "nao_existe"}])
     csv_ = (f"{CAB}02/01/2024,-12.50,{U1},Compra no débito - PADARIA MODELO\n").encode()
-    r = TestClient(app).post("/api/extratos", files={"arquivo": ("e.csv", csv_)})
-    assert r.status_code == 500
-    assert "linha 2" in r.json()["detail"]
-    assert "PADARIA" not in r.json()["detail"]
+    assert TestClient(app).post("/api/extratos", files={"arquivo": ("e.csv", csv_)}).status_code == 200
 
 
-# --- classificador (passo 3) ---
+# --- classificador (todas as saídas) ---
 
 class _ModeloFalso:
     """Devolve sempre a mesma classe e guarda o que recebeu."""
@@ -109,27 +94,28 @@ class _ModeloFalso:
         return [self.classe] * len(df)
 
 
-def test_modelo_so_preenche_o_que_regra_e_mapa_nao_resolveram(dir_privado, monkeypatch):
-    _grava_mapa(dir_privado, [{"contraparte": "PADARIA MODELO", "classe": "mercado"}])
+def test_modelo_classifica_todas_as_saidas_e_nunca_as_entradas(dir_privado, monkeypatch):
+    _grava_mapa(dir_privado, [{"contraparte": "PADARIA MODELO", "classe": "mercado"}])  # ignorado
     falso = _ModeloFalso("compras")
     monkeypatch.setattr(categorizacao, "carrega_modelo", lambda caminho: falso)
     resultado = categoriza(_resultado(*CASOS))
-    tarifa, _, _, _, padaria, loja, empresa = resultado.transacoes
-    assert (tarifa.categoria, tarifa.origem_categoria) == ("financeiro", "regra")
-    assert (padaria.categoria, padaria.origem_categoria) == ("mercado", "mapa")
-    assert (loja.categoria, loja.origem_categoria) == ("compras", "modelo")
-    assert (empresa.categoria, empresa.origem_categoria) == ("compras", "modelo")
+    tarifa, pix_recebido, pix_enviado, boleto, padaria, loja, empresa = resultado.transacoes
+    assert (pix_recebido.categoria, pix_recebido.origem_categoria) == ("receitas", "regra")
+    for t in (tarifa, pix_enviado, boleto, padaria, loja, empresa):
+        assert (t.categoria, t.origem_categoria) == ("compras", "modelo")
     assert resultado.sem_categoria == 0
-    # o modelo recebe só as pendentes, com as colunas do CSV do parser e o valor numérico
+    # o modelo recebe só as saídas, com as colunas do CSV do parser e o valor numérico
     assert list(falso.recebido.columns) == list(COLUNAS)
-    assert list(falso.recebido["contraparte"]) == ["LOJA INVENTADA", "EMPRESA FICTICIA LTDA"]
+    assert list(falso.recebido["tipo"]) == ["saida"] * 6
+    assert list(falso.recebido["contraparte"]) == [
+        "", PESSOA_FISICA, "", "PADARIA MODELO", "LOJA INVENTADA", "EMPRESA FICTICIA LTDA"]
     assert falso.recebido["valor"].dtype == float
 
 
-def test_sem_pendentes_o_modelo_nao_e_chamado(monkeypatch):
+def test_so_entradas_o_modelo_nao_e_chamado(monkeypatch):
     falso = _ModeloFalso("compras")
     monkeypatch.setattr(categorizacao, "carrega_modelo", lambda caminho: falso)
-    categoriza(_resultado(CASOS[0]))
+    categoriza(_resultado(CASOS[1]))
     assert falso.recebido is None
 
 

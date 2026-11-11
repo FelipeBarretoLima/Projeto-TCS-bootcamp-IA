@@ -1,11 +1,14 @@
-"""Categoria de cada transação: regras fixas, mapa de estabelecimentos e, por último, o classificador.
+"""Categoria de cada transação: entradas por regra, saídas pelo classificador (ML).
 
-Ordem (a primeira que achar vence):
-    1. regra fixa (`ml.classes.por_regra`)         -> origem "regra"
-    2. mapa de estabelecimentos pelo nome-base      -> origem "mapa"
-    3. classificador treinado (`ml/modelos/*.pkl`)  -> origem "modelo"
-Os passos 1 e 2 são a mesma lógica de `ml.rotular.categoria`. Sem o .pkl, o passo 3 é pulado e a
-transação fica sem categoria, como antes.
+    1. entrada (dinheiro recebido)  -> "receitas"                  origem "regra"
+    2. saída                         -> classificador ml/modelos/*.pkl  origem "modelo"
+
+As regras fixas e o mapa de estabelecimentos (ml.classes.por_regra, data/privado) não entram aqui:
+eles só geram os rótulos do treino (python -m ml.rotular). O modelo aprendeu o que eles faziam.
+Medido no CSV rotulado, só nas saídas: ~99% de acerto em estabelecimento já visto, 100% em PIX
+para pessoa/tarifa/fatura e ~81% em estabelecimento nunca visto (validação cruzada por loja).
+
+Sem o .pkl, as saídas ficam sem categoria.
 """
 
 import logging
@@ -14,10 +17,8 @@ from pathlib import Path
 import joblib
 import pandas as pd
 
-from extrato.estabelecimentos import nome_base
-from extrato.modelos import COLUNAS, Meio, Tipo
-from ml.classes import Categoria, por_regra
-from ml.rotular import carrega_mapa
+from extrato.modelos import COLUNAS
+from ml.classes import Categoria
 
 from .. import config
 from ..esquemas import ResultadoUpload, Transacao
@@ -26,10 +27,6 @@ log = logging.getLogger(__name__)
 
 # caminho -> (data de modificação, modelo): recarrega sozinho se o .pkl for treinado de novo
 _cache_modelo: dict[Path, tuple[float, object]] = {}
-
-
-class MapaInvalido(Exception):
-    """O mapa de estabelecimentos tem classe inválida (a mensagem só diz arquivo e linha)."""
 
 
 def carrega_modelo(caminho: Path):
@@ -50,18 +47,14 @@ def carrega_modelo(caminho: Path):
     return modelo
 
 
-def _por_regra_ou_mapa(t: Transacao, mapa: dict[str, Categoria]) -> Transacao:
-    regra = por_regra(Meio(t.meio), Tipo(t.tipo), t.historico, t.contraparte)
-    if regra is not None:
-        return t.model_copy(update={"categoria": regra.value, "origem_categoria": "regra"})
-    do_mapa = mapa.get(nome_base(t.contraparte))
-    if do_mapa is not None:
-        return t.model_copy(update={"categoria": do_mapa.value, "origem_categoria": "mapa"})
+def _entrada_e_receita(t: Transacao) -> Transacao:
+    if t.tipo == "entrada":
+        return t.model_copy(update={"categoria": Categoria.RECEITAS.value, "origem_categoria": "regra"})
     return t
 
 
 def _pelo_modelo(transacoes: list[Transacao], modelo) -> list[Transacao]:
-    """Preenche, com o classificador, as transações que regra e mapa não resolveram."""
+    """Classifica com o modelo as transações ainda sem categoria (as saídas)."""
     pendentes = [i for i, t in enumerate(transacoes) if t.categoria is None]
     if not pendentes:
         return transacoes
@@ -82,14 +75,12 @@ def _pelo_modelo(transacoes: list[Transacao], modelo) -> list[Transacao]:
 
 
 def categoriza(resultado: ResultadoUpload) -> ResultadoUpload:
-    try:
-        mapa = carrega_mapa(config.DIR_PRIVADO)
-    except ValueError as exc:
-        raise MapaInvalido(str(exc)) from None
-    transacoes = [_por_regra_ou_mapa(t, mapa) for t in resultado.transacoes]
+    transacoes = [_entrada_e_receita(t) for t in resultado.transacoes]
     modelo = carrega_modelo(config.CAMINHO_MODELO)
     if modelo is not None:
         transacoes = _pelo_modelo(transacoes, modelo)
+    else:
+        log.warning("classificador ausente (%s): as saídas ficam sem categoria", config.CAMINHO_MODELO)
     return resultado.model_copy(update={
         "transacoes": transacoes,
         "sem_categoria": sum(t.categoria is None for t in transacoes),

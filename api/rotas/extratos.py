@@ -9,11 +9,12 @@ from fastapi import APIRouter, Depends, File, Form, HTTPException, Response, Upl
 
 from banco.repositorio import Banco, ExtratoRepetido
 
+from .. import cifra
 from ..autenticacao import Usuario, usuario_atual
 from ..config import EXTENSOES_ACEITAS, TAMANHO_MAXIMO, USUARIO_PADRAO
 from ..dependencias import banco
-from ..esquemas import ExtratoEnviado, Gravacao, ResultadoImportacao
-from ..servicos.categorizacao import MapaInvalido, categoriza
+from ..esquemas import ExtratoEnviado, Gravacao, ResultadoImportacao, Transacao
+from ..servicos.categorizacao import categoriza
 from ..servicos.extracao import VazamentoNaSaida, processa_extrato
 
 router = APIRouter(tags=["extratos"])
@@ -24,6 +25,15 @@ def _data_ou_none(texto: str) -> date | None:
         return date.fromisoformat(texto)
     except (TypeError, ValueError):
         return None
+
+
+def _para_gravar(t: Transacao) -> dict:
+    """O que vai para o banco: campos anonimizados + o original só cifrado (nunca em texto puro)."""
+    linha = t.model_dump(exclude={"historico_original", "contraparte_original"})
+    if t.historico_original is not None or t.contraparte_original is not None:
+        linha["original_cifrado"] = cifra.cifra(
+            {"historico": t.historico_original or "", "contraparte": t.contraparte_original or ""})
+    return linha
 
 
 # `def` (não `async def`): a extração é pesada e bloqueante; o FastAPI roda num thread à parte
@@ -55,10 +65,7 @@ def envia_extrato(
             422, "possível dado pessoal detectado na saída: nenhuma transação foi devolvida"
         ) from None
 
-    try:
-        resultado = categoriza(resultado)
-    except MapaInvalido as exc:
-        raise HTTPException(500, f"mapa de estabelecimentos inválido: {exc}") from None
+    resultado = categoriza(resultado)
 
     gravacao = None
     if resultado.relatorio.status == "aceito" and resultado.transacoes:
@@ -71,10 +78,12 @@ def envia_extrato(
                 parser=resultado.relatorio.parser,
                 periodo_inicio=_data_ou_none(resultado.relatorio.periodo_inicio),
                 periodo_fim=_data_ou_none(resultado.relatorio.periodo_fim),
-                transacoes=[t.model_dump() for t in resultado.transacoes],
+                transacoes=[_para_gravar(t) for t in resultado.transacoes],
             )
         except ExtratoRepetido:
             raise HTTPException(409, "este arquivo já foi importado") from None
+        except cifra.ChaveInvalida as exc:
+            raise HTTPException(500, str(exc)) from None
         gravacao = Gravacao(extrato_id=g.extrato_id, gravadas=g.gravadas, repetidas=g.repetidas)
     return ResultadoImportacao(**resultado.model_dump(), gravacao=gravacao)
 

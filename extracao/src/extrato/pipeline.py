@@ -58,6 +58,9 @@ class _Extraido:
 class Execucao:
     relatorios: list[RelatorioArquivo]
     linhas: list[LinhaSaida] = field(default_factory=list)
+    # texto ORIGINAL (sem anonimizar) de cada linha, na mesma ordem de `linhas`: {"historico", "contraparte"}.
+    # Nunca vai para o CSV nem para o treino; a API só guarda cifrado, para mostrar ao dono.
+    originais: list[dict[str, str]] = field(default_factory=list)
     revisar: list[dict[str, str]] = field(default_factory=list)
     desconhecidos: list[dict[str, str]] = field(default_factory=list)
     nomes_titulares: list[str] = field(default_factory=list)
@@ -132,6 +135,7 @@ def _transforma(item: _Extraido, usuario: str, nomes: re.Pattern[str] | None, ex
     assert item.parser is not None and item.resultado is not None
     rel, parser, resultado = item.relatorio, item.parser, item.resultado
     linhas: list[LinhaSaida] = []
+    originais: list[dict[str, str]] = []
     revisar: list[dict[str, str]] = []
     desconhecidos: set[str] = set()
     invalidas = 0
@@ -167,6 +171,8 @@ def _transforma(item: _Extraido, usuario: str, nomes: re.Pattern[str] | None, ex
             ))
         except ValidationError:  # a mensagem do pydantic inclui o valor: não propagar
             invalidas += 1
+        else:
+            originais.append({"historico": normaliza_historico(t.historico), "contraparte": t.contraparte})
 
     rel.historicos_desconhecidos = len(desconhecidos)
     execucao.desconhecidos.extend(
@@ -182,6 +188,7 @@ def _transforma(item: _Extraido, usuario: str, nomes: re.Pattern[str] | None, ex
     rel.linhas_omitidas = omitidas
     rel.status = ACEITO
     execucao.linhas.extend(linhas)
+    execucao.originais.extend(originais)
     execucao.revisar.extend(revisar)
 
 

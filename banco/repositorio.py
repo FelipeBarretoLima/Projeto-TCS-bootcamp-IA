@@ -21,6 +21,8 @@ from .deduplicacao import separa_novas
 
 COLUNAS_TRANSACAO = ("data", "historico", "contraparte", "valor", "tipo", "meio", "banco",
                      "categoria", "origem_categoria")
+# texto original cifrado pela API (api/cifra.py); opcional em cada transação
+COLUNA_ORIGINAL = "original_cifrado"
 
 
 class ExtratoRepetido(Exception):
@@ -82,10 +84,12 @@ class Banco:
             usuario_id, nome_arquivo, hash_arquivo, banco, parser, periodo_inicio, periodo_fim, len(gravar))["id"]
         if gravar:
             with self.con.cursor() as cur:
+                colunas = (*COLUNAS_TRANSACAO, COLUNA_ORIGINAL)
                 cur.executemany(
-                    f"insert into public.transacoes (usuario_id, extrato_id, {', '.join(COLUNAS_TRANSACAO)}) "
-                    f"values (%s, %s, {', '.join(['%s'] * len(COLUNAS_TRANSACAO))})",
-                    [(usuario_id, extrato_id, *(t[c] for c in COLUNAS_TRANSACAO)) for t in gravar])
+                    f"insert into public.transacoes (usuario_id, extrato_id, {', '.join(colunas)}) "
+                    f"values (%s, %s, {', '.join(['%s'] * len(colunas))})",
+                    [(usuario_id, extrato_id, *(t[c] for c in COLUNAS_TRANSACAO), t.get(COLUNA_ORIGINAL))
+                     for t in gravar])
         return Gravacao(extrato_id, len(gravar), repetidas)
 
     def lista_extratos(self, usuario_id: UUID) -> list[dict[str, Any]]:
@@ -115,6 +119,7 @@ class Banco:
         """Transações do usuário para a aba Extrato, da mais recente para a mais antiga.
 
         Filtros opcionais: período (inclusivo) e uma categoria, ou só as sem categoria.
+        Inclui o original cifrado (só a aba Extrato decifra; `transacoes()`, do chat, não o lê).
         """
         condicoes, args = ["usuario_id = %s"], [usuario_id]
         if inicio is not None:
@@ -129,8 +134,8 @@ class Banco:
             condicoes.append("categoria = %s")
             args.append(categoria)
         return self._todas(
-            "select data, historico, contraparte, valor, tipo, meio, banco, categoria from public.transacoes "
-            f"where {' and '.join(condicoes)} order by data desc, id desc", *args)
+            "select data, historico, contraparte, valor, tipo, meio, banco, categoria, original_cifrado "
+            f"from public.transacoes where {' and '.join(condicoes)} order by data desc, id desc", *args)
 
     # --- conversas do assistente ---
 

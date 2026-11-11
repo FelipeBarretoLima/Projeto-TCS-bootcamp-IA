@@ -8,6 +8,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from banco.repositorio import Banco
 from ml.classes import Categoria
 
+from .. import cifra
 from ..autenticacao import Usuario, usuario_atual
 from ..dependencias import banco
 from ..esquemas import PeriodoTransacoes, TransacaoSalva
@@ -59,4 +60,14 @@ def lista_transacoes(
         categoria=categoria if categoria in validas else None,
         sem_categoria=categoria == SEM_CATEGORIA,
     )
-    return [TransacaoSalva(**t) for t in linhas]
+    try:
+        return [_com_original(t) for t in linhas]
+    except cifra.ChaveInvalida as exc:
+        raise HTTPException(500, str(exc)) from None
+
+
+def _com_original(linha: dict) -> TransacaoSalva:
+    """Decifra o original só para devolver ao dono; o texto cifrado não sai da API."""
+    original = cifra.decifra(linha.pop("original_cifrado", None)) or {}
+    return TransacaoSalva(**linha, historico_original=original.get("historico") or None,
+                          contraparte_original=original.get("contraparte") or None)

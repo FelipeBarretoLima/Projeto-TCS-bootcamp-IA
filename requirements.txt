@@ -2,6 +2,7 @@
 pandas==3.1.0
 pydantic==2.14.2
 python-dotenv==1.2.4
+cryptography==50.0.2  # cifra o texto original das transações (api/cifra.py)
 pytest==9.2.0
 
 # Módulo de ML (notebook)

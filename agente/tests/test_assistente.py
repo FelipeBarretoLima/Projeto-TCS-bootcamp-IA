@@ -41,3 +41,19 @@ def test_resposta_sem_nota_de_grafico_inventada():
 
     assert _limpa("Saldo de R$ 10,00.\n\n[gráfico mostrado: Receitas x despesas]") == "Saldo de R$ 10,00."
     assert _limpa("Gastou R$ 5,00 [Gráfico: barras] no mês.") == "Gastou R$ 5,00\nno mês."
+
+
+def test_ferramenta_aceita_periodo_e_devolve_erro_ao_modelo_em_vez_de_quebrar():
+    graficos = []
+    por_nome = {f.name: f for f in ferramentas(_df(), graficos)}
+    ok = por_nome["gastos_mensais"].invoke({"de": "2024-01", "ate": "2024-12"})
+    assert ok["total"] == 50.0 and ok["periodo"] == "jan/24 a dez/24"
+    erro = por_nome["gastos_mensais"].invoke({"de": "janeiro"})
+    assert "AAAA-MM" in erro["erro"] and len(graficos) == 1  # o erro não gera gráfico
+
+
+def test_instrucoes_recebem_o_periodo_dos_extratos():
+    from agente.assistente import contexto_dos_dados
+
+    assert contexto_dos_dados(_df()) == "\nExtratos enviados: de 05/01/2024 a 05/01/2024 (1 transação)."
+    assert "nenhum" in contexto_dos_dados(consultas.tabela([]))
