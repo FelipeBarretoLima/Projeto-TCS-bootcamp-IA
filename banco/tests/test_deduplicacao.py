@@ -3,7 +3,7 @@
 from datetime import date
 from decimal import Decimal
 
-from banco.deduplicacao import separa_novas
+from banco.deduplicacao import separa_novas, separa_novas_com_ids
 
 
 def _t(dia=2, valor="-8.94", banco="nubank", contraparte="UBER"):
@@ -30,3 +30,9 @@ def test_bancos_diferentes_nao_se_misturam():
 def test_valor_comparado_em_centavos():
     gravar, _ = separa_novas([_t(valor="-8.9")], [{**_t(), "valor": -8.90}])
     assert gravar == []
+
+
+def test_repetidas_dizem_qual_transacao_ja_gravada_casou():
+    existentes = [{**_t(), "id": 10}, {**_t(), "id": 11}, {**_t(dia=3), "id": 12}]
+    gravar, ids = separa_novas_com_ids(existentes, [_t(), _t(dia=3), _t(dia=4)])
+    assert ids == [10, 12] and [t["data"].day for t in gravar] == [4]

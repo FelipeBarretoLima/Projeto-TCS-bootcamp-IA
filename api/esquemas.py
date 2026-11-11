@@ -53,6 +53,7 @@ class Transacao(BaseModel):
 class TransacaoSalva(BaseModel):
     """Transação gravada na conta do usuário (aba Extrato). Não diz de onde veio a categoria."""
 
+    id: int
     data: date
     historico: str
     contraparte: str
@@ -114,9 +115,16 @@ class Grafico(BaseModel):
     formato: str = "moeda"
 
 
+class MesDisponivel(BaseModel):
+    valor: str  # "AAAA-MM"
+    rotulo: str  # "mar/24"
+
+
 class Painel(BaseModel):
     tem_dados: bool
     mes: str | None
+    mes_valor: str | None = None  # o mês mostrado, "AAAA-MM"
+    meses: list[MesDisponivel] = []  # meses com transações, do mais recente ao mais antigo
     receitas: float
     despesas: float
     saldo: float
@@ -147,3 +155,20 @@ class RespostaChat(BaseModel):
     conversa_id: UUID
     pergunta: Mensagem
     resposta: Mensagem
+
+
+class NovaCategoria(BaseModel):
+    categoria: str | None  # uma das 8 categorias; None = sem categoria
+
+
+class NovoTitulo(BaseModel):
+    titulo: str = Field(min_length=1, max_length=60)
+
+
+class NovoNome(BaseModel):
+    nome: str = Field(min_length=1, max_length=80)
+
+
+class Perfil(BaseModel):
+    nome: str
+    email: str

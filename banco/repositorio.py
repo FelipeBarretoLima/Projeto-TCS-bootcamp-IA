@@ -17,7 +17,7 @@ from uuid import UUID
 import psycopg
 from psycopg.rows import dict_row
 
-from .deduplicacao import separa_novas
+from .deduplicacao import separa_novas_com_ids
 
 COLUNAS_TRANSACAO = ("data", "historico", "contraparte", "valor", "tipo", "meio", "banco",
                      "categoria", "origem_categoria")
@@ -27,6 +27,10 @@ COLUNA_ORIGINAL = "original_cifrado"
 
 class ExtratoRepetido(Exception):
     """O mesmo arquivo (mesmo hash) já foi enviado por este usuário."""
+
+
+class ConversaApagada(Exception):
+    """A conversa foi apagada enquanto a resposta era gerada."""
 
 
 @dataclass(frozen=True)
@@ -59,6 +63,13 @@ class Banco:
     def perfil(self, usuario_id: UUID) -> dict[str, Any] | None:
         return self._uma("select id, nome, email, criado_em from public.usuarios where id = %s", usuario_id)
 
+    def muda_nome(self, usuario_id: UUID, nome: str) -> None:
+        self.con.execute("update public.usuarios set nome = %s where id = %s", (nome, usuario_id))
+
+    def apaga_conta(self, usuario_id: UUID) -> None:
+        """Apaga o login no Supabase Auth; perfil, extratos, transações e conversas vão em cascata."""
+        self.con.execute("delete from auth.users where id = %s", (usuario_id,))
+
     # --- extratos e transações ---
 
     def grava_extrato(self, usuario_id: UUID, *, nome_arquivo: str, hash_arquivo: str, parser: str,
@@ -72,16 +83,20 @@ class Banco:
         if transacoes:
             datas = [t["data"] for t in transacoes]
             existentes = self._todas(
-                "select banco, data, valor, tipo, meio, historico, contraparte from public.transacoes "
-                "where usuario_id = %s and banco = any(%s) and data between %s and %s",
+                "select id, banco, data, valor, tipo, meio, historico, contraparte from public.transacoes "
+                "where usuario_id = %s and banco = any(%s) and data between %s and %s order by id",
                 usuario_id, sorted({t["banco"] for t in transacoes}), min(datas), max(datas))
-        gravar, repetidas = separa_novas(existentes, transacoes)
+        gravar, ids_repetidas = separa_novas_com_ids(existentes, transacoes)
         bancos = Counter(t["banco"] for t in transacoes)
         banco = bancos.most_common(1)[0][0] if bancos else ""
-        extrato_id = self._uma(
-            "insert into public.extratos (usuario_id, nome_arquivo, hash_arquivo, banco, parser, "
-            "periodo_inicio, periodo_fim, linhas_gravadas) values (%s, %s, %s, %s, %s, %s, %s, %s) returning id",
-            usuario_id, nome_arquivo, hash_arquivo, banco, parser, periodo_inicio, periodo_fim, len(gravar))["id"]
+        try:
+            extrato_id = self._uma(
+                "insert into public.extratos (usuario_id, nome_arquivo, hash_arquivo, banco, parser, "
+                "periodo_inicio, periodo_fim, linhas_gravadas) values (%s, %s, %s, %s, %s, %s, %s, %s) returning id",
+                usuario_id, nome_arquivo, hash_arquivo, banco, parser, periodo_inicio, periodo_fim, len(gravar))["id"]
+        except psycopg.errors.UniqueViolation:
+            # o mesmo arquivo chegou duas vezes ao mesmo tempo (ex.: duas abas): o outro envio ganhou
+            raise ExtratoRepetido from None
         if gravar:
             with self.con.cursor() as cur:
                 colunas = (*COLUNAS_TRANSACAO, COLUNA_ORIGINAL)
@@ -90,7 +105,17 @@ class Banco:
                     f"values (%s, %s, {', '.join(['%s'] * len(colunas))})",
                     [(usuario_id, extrato_id, *(t[c] for c in COLUNAS_TRANSACAO), t.get(COLUNA_ORIGINAL))
                      for t in gravar])
-        return Gravacao(extrato_id, len(gravar), repetidas)
+        # vínculos: as gravadas agora e as repetidas (que já estavam no banco vindas de outro extrato)
+        self.con.execute(
+            "insert into public.extrato_transacoes (extrato_id, transacao_id) "
+            "select %s, id from public.transacoes where extrato_id = %s",
+            (extrato_id, extrato_id))
+        if ids_repetidas:
+            self.con.execute(
+                "insert into public.extrato_transacoes (extrato_id, transacao_id) "
+                "select %s, unnest(%s::bigint[]) on conflict do nothing",
+                (extrato_id, ids_repetidas))
+        return Gravacao(extrato_id, len(gravar), len(ids_repetidas))
 
     def lista_extratos(self, usuario_id: UUID) -> list[dict[str, Any]]:
         return self._todas(
@@ -98,7 +123,29 @@ class Banco:
             "from public.extratos where usuario_id = %s order by enviado_em desc", usuario_id)
 
     def apaga_extrato(self, usuario_id: UUID, extrato_id: UUID) -> bool:
-        """Apaga o extrato e as transações dele (cascata). False se não for do usuário."""
+        """Apaga o extrato e as transações que só ele trouxe. False se não for do usuário.
+
+        Uma transação que outro extrato também trouxe (períodos sobrepostos) não é apagada: passa
+        para esse outro extrato, que continua importado.
+        """
+        if not self._uma("select 1 from public.extratos where id = %s and usuario_id = %s",
+                         extrato_id, usuario_id):
+            return False
+        herdeiros = self._todas(
+            "update public.transacoes t set extrato_id = o.extrato_id "
+            "from (select distinct on (et.transacao_id) et.transacao_id, et.extrato_id "
+            "      from public.extrato_transacoes et "
+            "      join public.extratos e on e.id = et.extrato_id and e.usuario_id = %s "
+            "      where et.extrato_id <> %s and et.transacao_id in "
+            "            (select id from public.transacoes where extrato_id = %s) "
+            "      order by et.transacao_id, e.enviado_em) o "
+            "where t.id = o.transacao_id returning t.extrato_id",
+            usuario_id, extrato_id, extrato_id)
+        if herdeiros:
+            self.con.execute(
+                "update public.extratos e set linhas_gravadas = "
+                "(select count(*) from public.transacoes t where t.extrato_id = e.id) where e.id = any(%s)",
+                (sorted({h["extrato_id"] for h in herdeiros}),))
         cur = self.con.execute("delete from public.extratos where id = %s and usuario_id = %s",
                                (extrato_id, usuario_id))
         return cur.rowcount > 0
@@ -134,8 +181,17 @@ class Banco:
             condicoes.append("categoria = %s")
             args.append(categoria)
         return self._todas(
-            "select data, historico, contraparte, valor, tipo, meio, banco, categoria, original_cifrado "
+            "select id, data, historico, contraparte, valor, tipo, meio, banco, categoria, original_cifrado "
             f"from public.transacoes where {' and '.join(condicoes)} order by data desc, id desc", *args)
+
+    def muda_categoria(self, usuario_id: UUID, transacao_id: int, categoria: str | None) -> bool:
+        """Correção feita pelo usuário (origem "usuario"); None = sem categoria. False se não for dele."""
+        cur = self.con.execute(
+            "update public.transacoes set categoria = %s, "
+            "origem_categoria = case when %s::text is null then null else 'usuario' end "
+            "where id = %s and usuario_id = %s",
+            (categoria, categoria, transacao_id, usuario_id))
+        return cur.rowcount > 0
 
     # --- conversas do assistente ---
 
@@ -152,6 +208,11 @@ class Banco:
         return self._uma("select 1 from public.conversas where id = %s and usuario_id = %s",
                          conversa_id, usuario_id) is not None
 
+    def renomeia_conversa(self, usuario_id: UUID, conversa_id: UUID, titulo: str) -> bool:
+        cur = self.con.execute("update public.conversas set titulo = %s where id = %s and usuario_id = %s",
+                               (titulo, conversa_id, usuario_id))
+        return cur.rowcount > 0
+
     def apaga_conversa(self, usuario_id: UUID, conversa_id: UUID) -> bool:
         cur = self.con.execute("delete from public.conversas where id = %s and usuario_id = %s",
                                (conversa_id, usuario_id))
@@ -164,10 +225,13 @@ class Banco:
 
     def grava_mensagem(self, conversa_id: UUID, papel: str, texto: str,
                        grafico: dict[str, Any] | None = None) -> dict[str, Any]:
-        return self._uma(
-            "insert into public.mensagens (conversa_id, papel, texto, grafico) values (%s, %s, %s, %s) "
-            "returning id, papel, texto, grafico, criada_em",
-            conversa_id, papel, texto, json.dumps(grafico, default=_json) if grafico else None)
+        try:
+            return self._uma(
+                "insert into public.mensagens (conversa_id, papel, texto, grafico) values (%s, %s, %s, %s) "
+                "returning id, papel, texto, grafico, criada_em",
+                conversa_id, papel, texto, json.dumps(grafico, default=_json) if grafico else None)
+        except psycopg.errors.ForeignKeyViolation:
+            raise ConversaApagada from None
 
 
 def _json(valor: Any) -> Any:

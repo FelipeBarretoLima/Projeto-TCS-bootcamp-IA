@@ -65,6 +65,21 @@ def test_apaga_extrato_e_suas_transacoes(db, logado_como):
     assert db.transacoes(USUARIO.id) == [] and cliente.get("/api/extratos").json() == []
 
 
+def test_excluir_extrato_nao_apaga_o_que_outro_extrato_tambem_trouxe(db):
+    cliente = TestClient(app)
+    a = CAB + _linha("02/01/2024", "-8.94", 1) + _linha("03/01/2024", "-20.00", 2)
+    b = CAB + _linha("03/01/2024", "-20.00", 3) + _linha("05/01/2024", "-30.00", 4)  # repete o dia 3
+    ea = _envia(a, "a.csv").json()["gravacao"]["extrato_id"]
+    eb = _envia(b, "b.csv").json()["gravacao"]["extrato_id"]
+    assert cliente.delete(f"/api/extratos/{ea}").status_code == 204
+    # o dia 3 também estava no extrato b: continua na conta, agora como transação do b
+    assert sorted(t["data"].day for t in db.transacoes(USUARIO.id)) == [3, 5]
+    [restante] = cliente.get("/api/extratos").json()
+    assert restante["id"] == eb and restante["linhas_gravadas"] == 2
+    assert cliente.delete(f"/api/extratos/{eb}").status_code == 204
+    assert db.transacoes(USUARIO.id) == []
+
+
 def test_sem_login_da_401():
     app.dependency_overrides.pop(usuario_atual)
     cliente = TestClient(app)

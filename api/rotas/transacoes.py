@@ -3,7 +3,7 @@
 from datetime import date
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Response
 
 from banco.repositorio import Banco
 from ml.classes import Categoria
@@ -11,7 +11,7 @@ from ml.classes import Categoria
 from .. import cifra
 from ..autenticacao import Usuario, usuario_atual
 from ..dependencias import banco
-from ..esquemas import PeriodoTransacoes, TransacaoSalva
+from ..esquemas import NovaCategoria, PeriodoTransacoes, TransacaoSalva
 
 router = APIRouter(tags=["transacoes"])
 
@@ -71,3 +71,18 @@ def _com_original(linha: dict) -> TransacaoSalva:
     original = cifra.decifra(linha.pop("original_cifrado", None)) or {}
     return TransacaoSalva(**linha, historico_original=original.get("historico") or None,
                           contraparte_original=original.get("contraparte") or None)
+
+
+@router.patch("/transacoes/{transacao_id}", status_code=204)
+def muda_categoria(
+    transacao_id: int,
+    nova: NovaCategoria,
+    usuario: Annotated[Usuario, Depends(usuario_atual)],
+    db: Annotated[Banco, Depends(banco)],
+) -> Response:
+    """O usuário corrige a categoria (vale para o dashboard e o assistente). None = sem categoria."""
+    if nova.categoria is not None and nova.categoria not in {c.value for c in Categoria}:
+        raise HTTPException(400, "categoria inválida")
+    if not db.muda_categoria(usuario.id, transacao_id, nova.categoria):
+        raise HTTPException(404, "transação não encontrada")
+    return Response(status_code=204)

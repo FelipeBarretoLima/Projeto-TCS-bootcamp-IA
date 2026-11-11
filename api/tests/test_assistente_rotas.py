@@ -101,3 +101,16 @@ def test_mensagem_vazia_da_422_ou_400(chamadas):
     cliente = TestClient(app)
     assert cliente.post("/api/chat", json={"mensagem": ""}).status_code == 422
     assert cliente.post("/api/chat", json={"mensagem": "   "}).status_code == 400
+
+
+def test_conversa_apagada_durante_a_resposta_da_404_sem_gravar(db, chamadas, monkeypatch):
+    cliente = TestClient(app)
+    cid = cliente.post("/api/chat", json={"mensagem": "oi"}).json()["conversa_id"]
+
+    def apaga_no_meio(modelo, df, pergunta, historico=()):
+        db.apaga_conversa(USUARIO.id, __import__("uuid").UUID(cid))  # outra aba apagou
+        return Resposta("tarde demais", None)
+
+    monkeypatch.setattr(rota, "responde", apaga_no_meio)
+    r = cliente.post("/api/chat", json={"mensagem": "e agora?", "conversa_id": cid})
+    assert r.status_code == 404 and "apagada" in r.json()["detail"]

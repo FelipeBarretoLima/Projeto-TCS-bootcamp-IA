@@ -5,6 +5,7 @@ import pytest
 from api import config
 from api.autenticacao import usuario_atual
 from api.dependencias import banco
+from api.limite import LIMITE_CHAT, LIMITE_IMPORTACAO
 from api.main import app
 from api.tests.falsos import USUARIO, BancoFalso
 
@@ -49,3 +50,10 @@ def logado_como():
     def troca(usuario):
         app.dependency_overrides[usuario_atual] = lambda: usuario
     return troca
+
+
+@pytest.fixture(autouse=True)
+def limites_zerados():
+    """Cada teste começa sem usos contados no limite por usuário."""
+    LIMITE_CHAT.zera()
+    LIMITE_IMPORTACAO.zera()

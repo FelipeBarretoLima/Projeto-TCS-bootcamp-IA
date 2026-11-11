@@ -42,6 +42,12 @@ def _consulta_supabase(token: str) -> Usuario | None:
     return Usuario(UUID(d["id"]), d.get("email") or "", (d.get("user_metadata") or {}).get("nome", ""))
 
 
+def esquece_token(authorization: str | None) -> None:
+    """Logout: o token deixa de valer aqui na hora, sem esperar o cache expirar."""
+    if authorization and authorization.lower().startswith("bearer "):
+        _cache.pop(authorization[7:].strip(), None)
+
+
 def usuario_atual(authorization: Annotated[str | None, Header()] = None) -> Usuario:
     """Dependência das rotas que precisam de login. 401 se faltar ou não valer o token."""
     if not authorization or not authorization.lower().startswith("bearer "):

@@ -12,7 +12,7 @@ Nada já gravado é apagado ou alterado.
 
 from __future__ import annotations
 
-from collections import Counter
+from collections import defaultdict
 from collections.abc import Iterable, Mapping
 from datetime import date
 from decimal import Decimal
@@ -26,15 +26,25 @@ def chave(t: Mapping[str, Any]) -> Chave:
             t["historico"], t["contraparte"] or "")
 
 
-def separa_novas(existentes: Iterable[Mapping[str, Any]], novas: list[Mapping[str, Any]]):
-    """Devolve (as que devem ser gravadas, quantas eram repetidas), na ordem do extrato."""
-    restam = Counter(chave(t) for t in existentes)
-    gravar, repetidas = [], 0
+def separa_novas_com_ids(existentes: Iterable[Mapping[str, Any]], novas: list[Mapping[str, Any]]):
+    """Devolve (as que devem ser gravadas, os ids das existentes que casaram com as repetidas).
+
+    O id (campo "id" de cada existente) diz qual transação já gravada também veio neste extrato.
+    """
+    restam: defaultdict[Chave, list[Any]] = defaultdict(list)
+    for t in existentes:
+        restam[chave(t)].append(t.get("id"))
+    gravar, ids_repetidas = [], []
     for t in novas:
-        k = chave(t)
-        if restam[k] > 0:
-            restam[k] -= 1
-            repetidas += 1
+        fila = restam.get(chave(t))
+        if fila:
+            ids_repetidas.append(fila.pop(0))
         else:
             gravar.append(t)
-    return gravar, repetidas
+    return gravar, ids_repetidas
+
+
+def separa_novas(existentes: Iterable[Mapping[str, Any]], novas: list[Mapping[str, Any]]):
+    """Devolve (as que devem ser gravadas, quantas eram repetidas), na ordem do extrato."""
+    gravar, ids_repetidas = separa_novas_com_ids(existentes, novas)
+    return gravar, len(ids_repetidas)

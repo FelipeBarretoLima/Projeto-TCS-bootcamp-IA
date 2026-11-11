@@ -14,6 +14,7 @@ from ..autenticacao import Usuario, usuario_atual
 from ..config import EXTENSOES_ACEITAS, TAMANHO_MAXIMO, USUARIO_PADRAO
 from ..dependencias import banco
 from ..esquemas import ExtratoEnviado, Gravacao, ResultadoImportacao, Transacao
+from ..limite import limita_importacao
 from ..servicos.categorizacao import categoriza
 from ..servicos.extracao import VazamentoNaSaida, processa_extrato
 
@@ -37,7 +38,7 @@ def _para_gravar(t: Transacao) -> dict:
 
 
 # `def` (não `async def`): a extração é pesada e bloqueante; o FastAPI roda num thread à parte
-@router.post("/extratos")
+@router.post("/extratos", dependencies=[Depends(limita_importacao)])
 def envia_extrato(
     arquivo: Annotated[UploadFile, File(description="Extrato em PDF ou CSV")],
     usuario: Annotated[Usuario, Depends(usuario_atual)],

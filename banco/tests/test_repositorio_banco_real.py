@@ -62,8 +62,13 @@ def test_fluxo_completo(db):
     assert db.mensagens(c)[1]["grafico"]["titulo"] == "t"
     assert db.conversa_e_do_usuario(u, c) and not db.conversa_e_do_usuario(_usuario(db), c)
 
+    # o extrato b também trazia as duas compras do dia 2: elas passam para ele em vez de sumir
     assert db.apaga_extrato(u, g1.extrato_id)
-    assert len(db.transacoes(u)) == 2
+    assert len(db.transacoes(u)) == 4
+    [restante] = db.lista_extratos(u)
+    assert restante["linhas_gravadas"] == 4
+    assert db.apaga_extrato(u, g2.extrato_id)
+    assert db.transacoes(u) == []
 
 
 def test_busca_transacoes_com_filtros(db):

@@ -47,6 +47,7 @@ O assistente nunca faz contas nem vê a lista de transações: o Gemini escolhe 
 | `GEMINI_API_KEY` | aistudio.google.com > **Get API key** |
 | `GEMINI_MODEL` | opcional; padrão `gemini-3.1-flash-lite` |
 | `CHAVE_ORIGINAIS` | cifra o texto original das transações (sem anonimizar), que só o dono vê. Gere com `python -m api.cifra --nova-chave` **uma vez** e passe a **mesma** chave para toda a equipe (por um canal privado, nunca no git). Sem ela, a tela mostra o texto anonimizado. Perder a chave = os originais já gravados não abrem mais. |
+| `CORS_ORIGENS` | opcional; só se a página for publicada num domínio diferente do da API (vários: separe por vírgula) |
 
 `SUPABASE_URL` é deduzido do `DATABASE_URL`. Nunca faça commit do `.env` nem cole o conteúdo dele
 em chats.
@@ -108,6 +109,22 @@ formas: toda **entrada** (dinheiro recebido) é `receitas`, por regra; toda **sa
 pelo modelo `ml/modelos/svm_tfidf.pkl` (gerado por `python -m ml.treinar`). Sem o `.pkl`, as saídas
 ficam sem categoria. As regras fixas e o mapa de estabelecimentos só geram os rótulos do treino
 (`python -m ml.rotular`); o modelo aprendeu o que eles faziam.
+
+Na aba Extrato, o usuário pode corrigir a categoria de uma transação (vale para o dashboard e o
+assistente; fica gravada com origem `usuario`). Para evitar abuso, cada usuário pode fazer até 10
+perguntas por minuto ao assistente e importar até 20 extratos a cada 10 minutos (`api/limite.py`).
+
+### Publicar (um único servidor)
+
+```bash
+cd frontend && npm run build && cd ..   # gera frontend/dist
+uvicorn api.main:app --host 0.0.0.0 --port 8000
+```
+
+Com `frontend/dist` presente, a própria API serve a página em http://localhost:8000. No Supabase
+(**Authentication > URL Configuration**), coloque o endereço publicado como **Site URL** e em
+**Redirect URLs** (o link de recuperar senha volta para `/redefinir-senha`). Depois de publicar uma
+versão nova, rode o `npm run build` de novo; para voltar a desenvolver só com o Vite, apague `frontend/dist`.
 
 ## Banco de dados (Supabase)
 
