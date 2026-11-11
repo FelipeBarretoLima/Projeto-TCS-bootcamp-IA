@@ -55,6 +55,16 @@ async function chama<T>(caminho: string, opcoes: RequestInit = {}): Promise<T> {
   return trataResposta<T>(await fetch(caminho, { ...opcoes, headers: cabecalhos }))
 }
 
+/** Logout: a API esquece o token na hora. Falhar aqui não impede sair (o token vence sozinho). */
+export async function encerraSessaoNaApi(): Promise<void> {
+  try {
+    const token = await tokenAtual()
+    if (token) await fetch('/api/sessao', { method: 'DELETE', headers: { Authorization: `Bearer ${token}` } })
+  } catch {
+    // API fora do ar: segue com o logout
+  }
+}
+
 export async function verificaSaude(): Promise<Saude> {
   return trataResposta<Saude>(await fetch('/api/saude'))
 }
@@ -78,7 +88,27 @@ export function listaTransacoes(filtros: FiltrosTransacoes, signal?: AbortSignal
 
 export const buscaPeriodo = () => chama<PeriodoTransacoes>('/api/transacoes/periodo')
 
-export const buscaPainel = () => chama<Painel>('/api/painel')
+/** Cartões de um mês ("AAAA-MM"; sem mês = o mais recente) e os 6 meses até ele. */
+export const buscaPainel = (mes?: string) =>
+  chama<Painel>(`/api/painel${mes ? `?mes=${encodeURIComponent(mes)}` : ''}`)
+
+const json = (corpo: unknown): RequestInit => ({
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify(corpo),
+})
+
+/** Corrige a categoria de uma transação salva (null = sem categoria). */
+export const mudaCategoria = (id: number, categoria: string | null) =>
+  chama<void>(`/api/transacoes/${id}`, { method: 'PATCH', ...json({ categoria }) })
+
+export const renomeiaConversa = (id: string, titulo: string) =>
+  chama<void>(`/api/conversas/${id}`, { method: 'PATCH', ...json({ titulo }) })
+
+export const mudaNomeNaApi = (nome: string) =>
+  chama<{ nome: string; email: string }>('/api/perfil', { method: 'PATCH', ...json({ nome }) })
+
+/** Apaga a conta e tudo o que é dela, sem volta. */
+export const apagaContaNaApi = () => chama<void>('/api/conta', { method: 'DELETE' })
 
 export const listaConversas = () => chama<Conversa[]>('/api/conversas')
 export const buscaMensagens = (id: string) => chama<Mensagem[]>(`/api/conversas/${id}/mensagens`)

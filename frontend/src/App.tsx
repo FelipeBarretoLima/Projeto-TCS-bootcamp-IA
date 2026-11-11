@@ -3,9 +3,12 @@ import { BrowserRouter, Navigate, Route, Routes } from 'react-router'
 import { Cabecalho } from './components/Cabecalho'
 import { ProvedorAutenticacao } from './contexto/Autenticacao'
 import { useAutenticacao } from './contexto/contextoAuth'
+import { PaginaConta } from './pages/PaginaConta'
 import { PaginaDashboard } from './pages/PaginaDashboard'
 import { PaginaExtrato } from './pages/PaginaExtrato'
+import { retornoDoLink } from './api/supabase'
 import { PaginaLogin } from './pages/PaginaLogin'
+import { PaginaRedefinirSenha } from './pages/PaginaRedefinirSenha'
 import { PaginaUpload } from './pages/PaginaUpload'
 import estilos from './App.module.css'
 
@@ -28,10 +31,16 @@ function Rotas() {
   return (
     <Routes>
       <Route path="/login" element={<PaginaLogin />} />
+      <Route path="/redefinir-senha" element={<PaginaRedefinirSenha />} />
       <Route path="/importar" element={<Protegida><PaginaUpload /></Protegida>} />
       <Route path="/extrato" element={<Protegida><PaginaExtrato /></Protegida>} />
       <Route path="/dashboard" element={<Protegida><PaginaDashboard /></Protegida>} />
-      <Route path="*" element={<Navigate to="/importar" replace />} />
+      <Route path="/conta" element={<Protegida><PaginaConta /></Protegida>} />
+      {/* se o Supabase devolver o link de recuperação na raiz, ainda abre a tela da senha nova */}
+      <Route
+        path="*"
+        element={<Navigate to={retornoDoLink.tipo === 'recovery' ? '/redefinir-senha' : '/importar'} replace />}
+      />
     </Routes>
   )
 }

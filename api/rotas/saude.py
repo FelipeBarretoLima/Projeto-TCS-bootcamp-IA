@@ -1,9 +1,19 @@
-from fastapi import APIRouter
+from typing import Annotated
+
+from fastapi import APIRouter, Header, Response
 
 from .. import config
+from ..autenticacao import esquece_token
 from ..esquemas import ConfigPublica, Saude
 
 router = APIRouter(tags=["saúde"])
+
+
+@router.delete("/sessao", status_code=204)
+def encerra_sessao(authorization: Annotated[str | None, Header()] = None) -> Response:
+    """Chamada no logout: a API esquece o token na hora (o Supabase encerra a sessão)."""
+    esquece_token(authorization)
+    return Response(status_code=204)
 
 
 @router.get("/saude")

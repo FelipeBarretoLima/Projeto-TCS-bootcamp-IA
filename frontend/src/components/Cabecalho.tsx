@@ -1,4 +1,4 @@
-import { LogOut, Moon, Sun } from 'lucide-react'
+import { LogOut, Moon, Sun, UserRound } from 'lucide-react'
 import { NavLink } from 'react-router'
 import { useAutenticacao } from '../contexto/contextoAuth'
 import { useTema } from '../hooks/useTema'
@@ -30,6 +30,14 @@ export function Cabecalho() {
         </nav>
         <div className={estilos.acoes}>
           <StatusApi />
+          <NavLink
+            to="/conta"
+            className={({ isActive }) => (isActive ? `${estilos.icone} ${estilos.iconeAtivo}` : estilos.icone)}
+            aria-label="Minha conta"
+            title="Minha conta"
+          >
+            <UserRound size={20} />
+          </NavLink>
           <button
             type="button"
             className={estilos.icone}

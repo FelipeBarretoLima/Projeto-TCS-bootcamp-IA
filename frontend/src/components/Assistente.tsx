@@ -1,9 +1,9 @@
 // Chat do Assistente TAS: conversas anteriores (carregadas ao entrar), mensagens com gráfico e
 // sugestões de pergunta.
 
-import { Bot, Plus, SendHorizontal, Trash2 } from 'lucide-react'
+import { Bot, Pencil, Plus, SendHorizontal, Trash2 } from 'lucide-react'
 import { useEffect, useRef, useState, type FormEvent } from 'react'
-import { ErroApi, apagaConversa, buscaMensagens, listaConversas, pergunta } from '../api/cliente'
+import { ErroApi, apagaConversa, buscaMensagens, listaConversas, pergunta, renomeiaConversa } from '../api/cliente'
 import type { Conversa, Mensagem } from '../api/tipos'
 import { Grafico } from './Grafico'
 import estilos from './Assistente.module.css'
@@ -26,7 +26,28 @@ export function Assistente() {
   const [pensando, setPensando] = useState(false)
   const [carregando, setCarregando] = useState(true)
   const [erro, setErro] = useState<string | null>(null)
+  const [confirmando, setConfirmando] = useState<string | null>(null) // conversa à espera do "Apagar"
+  const [renomeando, setRenomeando] = useState<{ id: string; titulo: string } | null>(null)
   const fimRef = useRef<HTMLDivElement>(null)
+  const salvouTitulo = useRef<{ id: string; titulo: string } | null>(null)
+
+  async function salvaTitulo() {
+    // Enter e depois o blur do campo que some: só a primeira chamada vale
+    if (!renomeando || salvouTitulo.current === renomeando) return
+    salvouTitulo.current = renomeando
+    const { id, titulo } = renomeando
+    const limpo = titulo.trim()
+    setRenomeando(null)
+    const anterior = conversas.find((c) => c.id === id)?.titulo
+    if (!limpo || limpo === anterior) return
+    setConversas((cs) => cs.map((c) => (c.id === id ? { ...c, titulo: limpo } : c)))
+    try {
+      await renomeiaConversa(id, limpo)
+    } catch (e) {
+      setConversas((cs) => cs.map((c) => (c.id === id && anterior ? { ...c, titulo: anterior } : c)))
+      setErro(mensagemDeErro(e))
+    }
+  }
 
   // ao entrar: carrega as conversas e abre a mais recente
   useEffect(() => {
@@ -66,6 +87,8 @@ export function Assistente() {
   }
 
   async function apaga(id: string) {
+    setConfirmando(null)
+    if (pensando) return // a resposta em andamento seria gravada nesta conversa
     try {
       await apagaConversa(id)
       setConversas((cs) => cs.filter((c) => c.id !== id))
@@ -125,22 +148,66 @@ export function Assistente() {
             <Plus size={16} /> Nova conversa
           </button>
           <ul>
-            {conversas.map((c) => (
-              <li key={c.id} className={c.id === atual ? estilos.ativa : undefined}>
-                <button type="button" onClick={() => void abre(c.id)} title={c.titulo}>
-                  {c.titulo}
-                </button>
-                <button
-                  type="button"
-                  className={estilos.apagar}
-                  onClick={() => void apaga(c.id)}
-                  aria-label={`Apagar a conversa "${c.titulo}"`}
-                  title="Apagar conversa"
-                >
-                  <Trash2 size={14} />
-                </button>
-              </li>
-            ))}
+            {conversas.map((c) =>
+              confirmando === c.id ? (
+                <li key={c.id} className={estilos.confirmacao} role="group" aria-label="Confirmar exclusão">
+                  <span>Apagar esta conversa?</span>
+                  <button type="button" className={estilos.cancelar} onClick={() => setConfirmando(null)}>
+                    Não
+                  </button>
+                  <button
+                    type="button"
+                    className={estilos.confirmar}
+                    onClick={() => void apaga(c.id)}
+                    disabled={pensando}
+                    autoFocus
+                  >
+                    Apagar
+                  </button>
+                </li>
+              ) : renomeando?.id === c.id ? (
+                <li key={c.id} className={estilos.ativa}>
+                  <input
+                    className={estilos.renomear}
+                    value={renomeando.titulo}
+                    onChange={(e) => setRenomeando({ id: c.id, titulo: e.target.value })}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') void salvaTitulo()
+                      if (e.key === 'Escape') setRenomeando(null)
+                    }}
+                    onBlur={() => void salvaTitulo()}
+                    maxLength={60}
+                    aria-label="Novo nome da conversa (Enter salva, Esc cancela)"
+                    autoFocus
+                  />
+                </li>
+              ) : (
+                <li key={c.id} className={c.id === atual ? estilos.ativa : undefined}>
+                  <button type="button" onClick={() => void abre(c.id)} title={c.titulo}>
+                    {c.titulo}
+                  </button>
+                  <button
+                    type="button"
+                    className={estilos.apagar}
+                    onClick={() => setRenomeando({ id: c.id, titulo: c.titulo })}
+                    aria-label={`Renomear a conversa "${c.titulo}"`}
+                    title="Renomear conversa"
+                  >
+                    <Pencil size={14} />
+                  </button>
+                  <button
+                    type="button"
+                    className={estilos.apagar}
+                    onClick={() => setConfirmando(c.id)}
+                    disabled={pensando}
+                    aria-label={`Apagar a conversa "${c.titulo}"`}
+                    title={pensando ? 'Aguarde a resposta do assistente' : 'Apagar conversa'}
+                  >
+                    <Trash2 size={14} />
+                  </button>
+                </li>
+              ),
+            )}
           </ul>
         </nav>
 

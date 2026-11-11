@@ -15,6 +15,9 @@ DIR_PRIVADO = RAIZ_PROJETO / "data" / "privado"
 # Classificador treinado (python -m ml.treinar). Fora do git; sem ele, as saídas ficam sem categoria.
 CAMINHO_MODELO = RAIZ_PROJETO / "ml" / "modelos" / "svm_tfidf.pkl"
 
+# página compilada (npm run build em frontend/): se existir, a API também serve a página
+DIR_FRONTEND = RAIZ_PROJETO / "frontend" / "dist"
+
 EXTENSOES_ACEITAS = frozenset({".pdf", ".csv"})
 TAMANHO_MAXIMO = 10 * 1024 * 1024  # 10 MB
 USUARIO_PADRAO = "u01"  # pseudônimo usado pelo parser; o dono real vem do login
@@ -45,3 +48,8 @@ CHAVE_ORIGINAIS = os.environ.get("CHAVE_ORIGINAIS", "").strip()
 # --- assistente (Gemini) ---
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "").strip()
 GEMINI_MODEL = os.environ.get("GEMINI_MODEL", "").strip() or "gemini-3.1-flash-lite"
+
+# --- publicação ---
+# domínios de onde a página pode chamar a API, separados por vírgula (só se a página estiver em
+# outro endereço; servida pela própria API ou pelo proxy do Vite, não precisa)
+CORS_ORIGENS = [o.strip().rstrip("/") for o in os.environ.get("CORS_ORIGENS", "").split(",") if o.strip()]

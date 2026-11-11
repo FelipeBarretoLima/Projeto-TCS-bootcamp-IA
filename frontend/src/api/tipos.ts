@@ -34,7 +34,7 @@ export type Transacao = {
 }
 
 /** Transação gravada na conta (aba Extrato): sem a origem da categoria. */
-export type TransacaoSalva = Omit<Transacao, 'origem_categoria'>
+export type TransacaoSalva = Omit<Transacao, 'origem_categoria'> & { id: number } // id: para corrigir a categoria
 
 /** Datas das transações do usuário e o filtro padrão (últimos 6 meses). null = nenhuma transação. */
 export type PeriodoTransacoes = {
@@ -92,9 +92,16 @@ export type Grafico = {
   formato: string
 }
 
+export type MesDisponivel = {
+  valor: string // "AAAA-MM"
+  rotulo: string // "mar/24"
+}
+
 export type Painel = {
   tem_dados: boolean
   mes: string | null
+  mes_valor: string | null // o mês mostrado, "AAAA-MM"
+  meses: MesDisponivel[] // meses com transações, do mais recente ao mais antigo
   receitas: number
   despesas: number
   saldo: number

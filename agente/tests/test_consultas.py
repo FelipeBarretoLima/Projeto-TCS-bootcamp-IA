@@ -143,3 +143,49 @@ def test_periodo_sem_extrato_avisa_em_vez_de_so_dar_zero(anos):
 def test_periodo_invalido(anos, de, ate, erro):
     with pytest.raises(ValueError, match=erro):
         c.gastos_mensais(anos, de=de, ate=ate)
+
+
+# --- mês do resumo e estornos ---
+
+def test_resumo_so_com_o_mes_usa_o_ano_mais_recente_com_aquele_mes(df):
+    # dados até mar/24: "janeiro" é jan/24 e "dezembro" é dez/23 (não o mês mais recente)
+    assert c.resumo_do_mes(df, None, 1).dados["mes"] == "jan/24"
+    assert c.resumo_do_mes(df, None, 1).dados["despesas"] == 380.0
+    assert c.resumo_do_mes(df, None, 12).dados["mes"] == "dez/23"
+    assert c.resumo_do_mes(df, 2024, None).dados["mes"] == "mar/24"
+
+
+def test_resumo_com_mes_invalido_devolve_erro_sem_excecao(df):
+    assert "erro" in c.resumo_do_mes(df, 2024, 13).dados
+
+
+def test_estorno_abate_a_compra_no_mesmo_estabelecimento():
+    # toda entrada é categorizada como receita (api/servicos/categorizacao.py), o estorno também
+    df = c.tabela([
+        _t(date(2024, 3, 1), -100, categoria="compras", contraparte="LOJA Z"),
+        _t(date(2024, 3, 2), -30, categoria="transporte", contraparte="UBER"),
+        _t(date(2024, 3, 5), 100, "entrada", "receitas", "LOJA Z", "estorno"),
+        _t(date(2024, 3, 6), 15, "entrada", "receitas", "SEM COMPRA", "estorno"),  # sem compra: é receita
+    ])
+    assert c.gastos_mensais(df, 1).dados["total"] == 30.0
+    # o estorno da LOJA Z já abateu a compra: não conta de novo como receita (só os 15 sem compra)
+    assert c.receitas_x_despesas(df, 1).dados["por_mes"]["mar/24"] == {
+        "receitas": 15.0, "despesas": 30.0, "saldo": -15.0}
+    assert (c.resumo_do_mes(df).dados["receitas"], c.painel(df)["receitas"]) == (15.0, 15.0)
+    assert [x["categoria"] for x in c.gastos_por_categoria(df, 1).dados["categorias"]] == ["transporte"]
+    assert c.resumo_do_mes(df).dados["despesas"] == 30.0
+    assert c.gastos_por_estabelecimento(df, 1).dados["estabelecimentos"] == [
+        {"estabelecimento": "UBER", "total": 30.0, "compras": 1}]
+    # a compra continua sendo uma das maiores compras do período
+    assert c.maiores_gastos(df, 1).dados["maiores"][0]["valor"] == 100.0
+
+
+def test_estorno_em_mes_sem_a_compra_nao_deixa_o_mes_negativo():
+    df = c.tabela([
+        _t(date(2024, 2, 1), -100, categoria="compras", contraparte="LOJA Z"),
+        _t(date(2024, 3, 5), 100, "entrada", "receitas", "LOJA Z", "estorno"),
+    ])
+    assert c.gastos_mensais(df, 2).dados["por_mes"] == {"fev/24": 100.0, "mar/24": 0.0}
+    assert c.receitas_x_despesas(df, 1).dados["total_despesas"] == 0.0
+    # o resumo de março também vê a compra de fevereiro: o estorno não vira receita no mês
+    assert c.resumo_do_mes(df, 2024, 3).dados["receitas"] == 0.0

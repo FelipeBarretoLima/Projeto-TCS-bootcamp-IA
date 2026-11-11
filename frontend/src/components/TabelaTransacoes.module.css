@@ -128,3 +128,33 @@
   padding: 2rem 1.75rem;
   color: var(--tinta-suave);
 }
+
+/* categoria editável (aba Extrato): o seletor tem a cara do selo */
+.seletor {
+  padding: 0.25rem 0.6rem;
+  border: none;
+  border-radius: 999px;
+  background: var(--selo-fundo);
+  color: var(--selo-texto);
+  font: inherit;
+  font-size: 0.875rem;
+  font-weight: 500;
+  cursor: pointer;
+  color-scheme: light dark;
+}
+
+.seletorVazio {
+  background: transparent;
+  box-shadow: inset 0 0 0 1px var(--borda);
+  color: var(--tinta-suave);
+}
+
+.seletor:focus-visible {
+  outline: 2px solid var(--azul);
+  outline-offset: 2px;
+}
+
+.seletor:disabled {
+  cursor: progress;
+  opacity: 0.6;
+}

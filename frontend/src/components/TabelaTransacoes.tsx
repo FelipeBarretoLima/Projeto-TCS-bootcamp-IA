@@ -1,14 +1,20 @@
-import type { TransacaoSalva } from '../api/tipos'
-import { formataData, formataValor, rotuloContraparte, rotuloMeio } from '../utils/formatacao'
+import type { Transacao } from '../api/tipos'
+import { LISTA_CATEGORIAS, formataData, formataValor, rotuloContraparte, rotuloMeio } from '../utils/formatacao'
 import { BadgeCategoria } from './BadgeCategoria'
 import estilos from './TabelaTransacoes.module.css'
 
-type Props = {
-  // a importação passa Transacao (com origem), a aba Extrato passa TransacaoSalva: a tabela só usa o comum
-  transacoes: TransacaoSalva[]
+/** O comum à importação (Transacao, sem id) e à aba Extrato (TransacaoSalva, com id). */
+type Linha = Omit<Transacao, 'origem_categoria'> & { id?: number }
+
+type Props<T extends Linha> = {
+  transacoes: T[]
+  /** Com esta função, a categoria vira um seletor para o usuário corrigir (null = sem categoria). */
+  onMudaCategoria?: (transacao: T, categoria: string | null) => void
+  /** Ids das transações cuja categoria está sendo gravada (seletor desativado). */
+  salvando?: ReadonlySet<number>
 }
 
-export function TabelaTransacoes({ transacoes }: Props) {
+export function TabelaTransacoes<T extends Linha>({ transacoes, onMudaCategoria, salvando }: Props<T>) {
   if (transacoes.length === 0) {
     return <p className={estilos.vazio}>Nenhuma transação para mostrar.</p>
   }
@@ -31,18 +37,37 @@ export function TabelaTransacoes({ transacoes }: Props) {
             // o texto original (sem anonimizar) quando a API o tiver; senão, o anonimizado
             const nome = t.contraparte_original || (t.contraparte ? rotuloContraparte(t.contraparte) : '')
             const historico = t.historico_original || t.historico
+            const descricao = nome || historico
             return (
-              <tr key={i}>
+              <tr key={t.id ?? i}>
                 <td className={estilos.data}>{formataData(t.data)}</td>
                 <td className={estilos.descricao}>
-                  <span className={estilos.principal}>{nome || historico}</span>
+                  <span className={estilos.principal}>{descricao}</span>
                   <span className={estilos.detalhe}>
                     {nome ? `${historico} · ` : ''}
                     {rotuloMeio(t.meio)}
                   </span>
                 </td>
                 <td className={estilos.categoria}>
-                  <BadgeCategoria categoria={t.categoria} />
+                  {onMudaCategoria && t.id !== undefined ? (
+                    <select
+                      className={t.categoria ? estilos.seletor : `${estilos.seletor} ${estilos.seletorVazio}`}
+                      value={t.categoria ?? ''}
+                      onChange={(e) => onMudaCategoria(t, e.target.value || null)}
+                      disabled={salvando?.has(t.id)}
+                      aria-label={`Categoria de ${descricao} em ${formataData(t.data)}`}
+                      title="Corrigir a categoria"
+                    >
+                      {LISTA_CATEGORIAS.map(([codigo, rotulo]) => (
+                        <option key={codigo} value={codigo}>
+                          {rotulo}
+                        </option>
+                      ))}
+                      <option value="">Sem categoria</option>
+                    </select>
+                  ) : (
+                    <BadgeCategoria categoria={t.categoria} />
+                  )}
                 </td>
                 <td className={`${estilos.numero} ${estilos[t.tipo]}`}>{formataValor(t.valor)}</td>
               </tr>

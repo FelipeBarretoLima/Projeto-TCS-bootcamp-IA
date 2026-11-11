@@ -60,14 +60,58 @@ def tabela(transacoes: Iterable[Mapping[str, Any]]) -> pd.DataFrame:
     return df
 
 
-def _despesas(df: pd.DataFrame) -> pd.DataFrame:
+def _compras(df: pd.DataFrame) -> pd.DataFrame:
+    """Saídas que são gasto, com a coluna `gasto` (positiva)."""
     d = df[(df["tipo"] == "saida") & (df["categoria"] != "financeiro")].copy()
     d["gasto"] = d["valor"].abs()
     return d
 
 
+def _estornos_casados(df: pd.DataFrame, compras: pd.DataFrame | None = None) -> pd.DataFrame:
+    """Estornos que devolvem uma compra: mesmo estabelecimento, compra no mesmo dia ou antes.
+
+    Cada um ganha a categoria da compra mais recente e `gasto` negativo (abate a compra). O índice é
+    o mesmo de `df`, para `_receitas` saber quais tirar.
+    """
+    compras = _compras(df) if compras is None else compras
+    estornos = df[(df["tipo"] == "entrada") & (df["meio"] == "estorno") & (df["contraparte"] != "")].copy()
+    if estornos.empty or compras.empty:
+        return estornos.iloc[0:0].assign(gasto=pd.Series(dtype=float))
+    ordenadas = compras.sort_values("data")
+
+    def categoria_da_compra(e: pd.Series) -> str | None:
+        antes = ordenadas[(ordenadas["contraparte"] == e["contraparte"]) & (ordenadas["data"] <= e["data"])]
+        return antes["categoria"].iloc[-1] if not antes.empty else None
+
+    estornos["categoria"] = estornos.apply(categoria_da_compra, axis=1)
+    estornos = estornos[estornos["categoria"].notna()]
+    return estornos.assign(gasto=-estornos["valor"].abs())
+
+
+def _despesas(df: pd.DataFrame, com_estornos: bool = True) -> pd.DataFrame:
+    """Saídas que são gasto (coluna `gasto`, positiva).
+
+    Com `com_estornos`, entram também os estornos de compras, com `gasto` negativo: a compra
+    estornada deixa de contar como gasto. Estorno sem compra correspondente não entra aqui (fica
+    como receita, ver `_receitas`).
+    """
+    d = _compras(df)
+    if not com_estornos:
+        return d
+    estornos = _estornos_casados(df, d)
+    return pd.concat([d, estornos]) if not estornos.empty else d
+
+
+def _sem_negativo(serie: pd.Series) -> pd.Series:
+    """Um estorno num mês sem a compra pode deixar o total negativo: mostra zero."""
+    return serie.clip(lower=0.0)
+
+
 def _receitas(df: pd.DataFrame) -> pd.DataFrame:
-    return df[(df["tipo"] == "entrada") & (df["categoria"] == "receitas")]
+    """Entradas da categoria `receitas`, menos os estornos que já abateram uma compra em `_despesas`
+    (toda entrada é categorizada como receita: sem isto, o estorno contaria duas vezes)."""
+    r = df[(df["tipo"] == "entrada") & (df["categoria"] == "receitas")]
+    return r.drop(index=_estornos_casados(df).index, errors="ignore")
 
 
 def _mes(texto: str, campo: str) -> pd.Period:
@@ -153,7 +197,7 @@ def gastos_mensais(df: pd.DataFrame, meses: int = 6, categoria: str | None = Non
     d = _despesas(df)
     if categoria:
         d = d[d["categoria"] == categoria]
-    por_mes = d.groupby("mes")["gasto"].sum().reindex(janela, fill_value=0.0)
+    por_mes = _sem_negativo(d.groupby("mes")["gasto"].sum().reindex(janela, fill_value=0.0))
     nome = NOMES_CATEGORIA[categoria] if categoria else "Gastos"
     valores = [_r(v) for v in por_mes]
     return Resultado(
@@ -173,6 +217,7 @@ def gastos_por_categoria(df: pd.DataFrame, meses: int = 1, de: str | None = None
     d = _despesas(df)
     d = d[d["mes"].isin(janela)]
     por_cat = d.groupby("categoria")["gasto"].sum().sort_values(ascending=False)
+    por_cat = por_cat[por_cat > 0]
     total = float(por_cat.sum())
     itens = [{"categoria": c, "nome": NOMES_CATEGORIA.get(c, c), "total": _r(v),
               "percentual": _r(100 * v / total) if total else 0.0} for c, v in por_cat.items()]
@@ -189,7 +234,7 @@ def receitas_x_despesas(df: pd.DataFrame, meses: int = 6, de: str | None = None,
         return _vazio()
     janela = _janela(df, meses, de, ate)
     rec = _receitas(df).groupby("mes")["valor"].sum().reindex(janela, fill_value=0.0)
-    desp = _despesas(df).groupby("mes")["gasto"].sum().reindex(janela, fill_value=0.0)
+    desp = _sem_negativo(_despesas(df).groupby("mes")["gasto"].sum().reindex(janela, fill_value=0.0))
     rotulos = [_rotulo(p) for p in janela]
     return Resultado(
         {"periodo": _periodo(janela),
@@ -230,7 +275,7 @@ def maiores_gastos(df: pd.DataFrame, meses: int = 1, quantidade: int = 5, catego
         return _vazio()
     quantidade = max(1, min(int(quantidade), 20))
     janela = _janela(df, meses, de, ate)
-    d = _despesas(df)
+    d = _despesas(df, com_estornos=False)  # compras individuais: o estorno não é uma compra
     d = d[d["mes"].isin(janela)]
     if categoria:
         d = d[d["categoria"] == categoria]
@@ -259,7 +304,9 @@ def gastos_por_estabelecimento(df: pd.DataFrame, meses: int = 3, quantidade: int
     d = d[d["mes"].isin(janela) & (d["contraparte"] != "")]
     if categoria:
         d = d[d["categoria"] == categoria]
-    grupos = d.groupby("contraparte")["gasto"].agg(["sum", "count"]).sort_values("sum", ascending=False).head(quantidade)
+    d = d.assign(compra=d["gasto"] > 0)  # estornos abatem o total, mas não contam como compra
+    grupos = d.groupby("contraparte").agg(sum=("gasto", "sum"), count=("compra", "sum"))
+    grupos = grupos[grupos["sum"] > 0].sort_values("sum", ascending=False).head(quantidade)
     itens = [{"estabelecimento": nome, "total": _r(s), "compras": int(n)} for nome, s, n in grupos.itertuples()]
     return Resultado(
         {"periodo": _periodo(janela), "categoria": categoria or "todas", "estabelecimentos": itens,
@@ -269,16 +316,38 @@ def gastos_por_estabelecimento(df: pd.DataFrame, meses: int = 3, quantidade: int
          "series": [{"nome": "Total", "valores": [i["total"] for i in itens]}], "formato": "moeda"} if itens else None)
 
 
+def _mes_alvo(df: pd.DataFrame, ano: int | None, mes: int | None) -> pd.Period:
+    """O mês pedido. Sem ano, o mais recente com aquele mês (até a última transação): "setembro"
+    com dados até mar/25 é set/24. Só o ano: o último mês com transações nele."""
+    ultimo = df["mes"].max()
+    if mes is None:
+        if not ano:
+            return ultimo
+        do_ano = df.loc[df["mes"].dt.year == ano, "mes"]
+        return do_ano.max() if not do_ano.empty else pd.Period(year=ano, month=12, freq="M")
+    if not ano:
+        ano = ultimo.year if mes <= ultimo.month else ultimo.year - 1
+    return pd.Period(year=ano, month=mes, freq="M")
+
+
 def resumo_do_mes(df: pd.DataFrame, ano: int | None = None, mes: int | None = None) -> Resultado:
     """Receitas, despesas, saldo e as categorias que mais pesaram num mês (padrão: o mais recente)."""
     if df.empty:
         return _vazio()
-    alvo = pd.Period(year=ano, month=mes, freq="M") if ano and mes else df["mes"].max()
+    if mes is not None and not 1 <= mes <= 12:
+        # devolve o erro ao modelo em vez de levantar exceção (que derrubaria a resposta inteira)
+        return Resultado({"erro": f"mês inválido: {mes}. Use um número de 1 a 12."})
+    alvo = _mes_alvo(df, ano, mes)
     no_mes = df[df["mes"] == alvo]
-    rec = float(_receitas(no_mes)["valor"].sum())
-    d = _despesas(no_mes)
-    desp = float(d["gasto"].sum())
+    # receitas e estornos sobre todas as transações: o estorno do mês pode ser de compra de outro mês
+    receitas = _receitas(df)
+    rec = float(receitas.loc[receitas["mes"] == alvo, "valor"].sum())
+    # os estornos são buscados em todas as transações (a compra pode ser de outro mês)
+    d = _despesas(df)
+    d = d[d["mes"] == alvo]
+    desp = max(0.0, float(d["gasto"].sum()))
     por_cat = d.groupby("categoria")["gasto"].sum().sort_values(ascending=False)
+    por_cat = por_cat[por_cat > 0]
     itens = [{"nome": NOMES_CATEGORIA.get(c, c), "total": _r(v)} for c, v in por_cat.items()]
     return Resultado(
         {"mes": _rotulo(alvo), "tem_transacoes": not no_mes.empty, "receitas": _r(rec), "despesas": _r(desp),
@@ -288,11 +357,21 @@ def resumo_do_mes(df: pd.DataFrame, ano: int | None = None, mes: int | None = No
          "formato": "moeda"} if itens else None)
 
 
-def painel(df: pd.DataFrame) -> dict[str, Any]:
-    """Cartões e gráfico do dashboard: o mês mais recente e os últimos 6 meses."""
+def meses_disponiveis(df: pd.DataFrame) -> list[dict[str, str]]:
+    """Meses com transações, do mais recente ao mais antigo: [{"valor": "2024-03", "rotulo": "mar/24"}]."""
+    return [{"valor": str(p), "rotulo": _rotulo(p)} for p in sorted(df["mes"].unique(), reverse=True)]
+
+
+def painel(df: pd.DataFrame, mes: str | None = None) -> dict[str, Any]:
+    """Cartões e gráfico do dashboard: um mês (padrão: o mais recente) e os 6 meses até ele.
+
+    `mes` no formato "AAAA-MM"; um mês sem transações mostra zeros.
+    """
     if df.empty:
-        return {"tem_dados": False, "mes": None, "receitas": 0.0, "despesas": 0.0, "saldo": 0.0, "grafico": None}
-    resumo = resumo_do_mes(df).dados
-    return {"tem_dados": True, "mes": resumo["mes"], "receitas": resumo["receitas"],
-            "despesas": resumo["despesas"], "saldo": resumo["saldo"],
-            "grafico": receitas_x_despesas(df, 6).grafico}
+        return {"tem_dados": False, "mes": None, "mes_valor": None, "meses": [], "receitas": 0.0,
+                "despesas": 0.0, "saldo": 0.0, "grafico": None}
+    alvo = pd.Period(mes, freq="M") if mes else df["mes"].max()
+    resumo = resumo_do_mes(df, alvo.year, alvo.month).dados
+    return {"tem_dados": True, "mes": resumo["mes"], "mes_valor": str(alvo), "meses": meses_disponiveis(df),
+            "receitas": resumo["receitas"], "despesas": resumo["despesas"], "saldo": resumo["saldo"],
+            "grafico": receitas_x_despesas(df, 6, ate=str(alvo)).grafico}

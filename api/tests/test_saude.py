@@ -19,3 +19,14 @@ def test_config_publica_nunca_expoe_a_chave_secreta(monkeypatch):
     assert r.json() == {"supabase_url": "https://exemplo.supabase.co",
                         "supabase_publishable_key": "sb_publishable_teste"}
     assert "sb_secret" not in r.text
+
+
+def test_logout_tira_o_token_do_cache():
+    import time
+
+    from api import autenticacao
+
+    autenticacao._cache["tok"] = (time.monotonic() + 60, object())
+    r = TestClient(app).delete("/api/sessao", headers={"Authorization": "Bearer tok"})
+    assert r.status_code == 204 and "tok" not in autenticacao._cache
+    assert TestClient(app).delete("/api/sessao").status_code == 204  # sem token: não faz nada

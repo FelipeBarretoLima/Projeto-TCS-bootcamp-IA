@@ -30,6 +30,16 @@ function textoGravacao({ gravadas, repetidas }: Gravacao): string {
   return `${novas} ${repetidas} ${verbo} de um extrato anterior e não ${contada} de novo.`
 }
 
+const TAMANHO_MAXIMO = 10 * 1024 * 1024 // 10 MB, como na API (api/config.py)
+
+/** Por que o arquivo nem deve ser enviado (mesmas mensagens da API), ou null se pode ir. */
+function motivoDeRecusa(arquivo: File): string | null {
+  if (!/\.(pdf|csv)$/i.test(arquivo.name)) return 'formato não aceito: envie um arquivo .pdf ou .csv'
+  if (arquivo.size === 0) return 'arquivo vazio'
+  if (arquivo.size > TAMANHO_MAXIMO) return 'arquivo maior que 10 MB'
+  return null
+}
+
 export function PaginaUpload() {
   const [estado, setEstado] = useState<Estado>({ fase: 'inicial' })
   const resultadoRef = useRef<HTMLDivElement>(null)
@@ -51,6 +61,12 @@ export function PaginaUpload() {
   }, [estado])
 
   async function enviar(arquivo: File) {
+    // mesmas regras da API, conferidas antes de mandar o arquivo inteiro pela rede
+    const recusa = motivoDeRecusa(arquivo)
+    if (recusa) {
+      setEstado({ fase: 'erro', mensagem: recusa, repetido: false })
+      return
+    }
     setEstado({ fase: 'enviando', nome: arquivo.name })
     try {
       const resultado = await enviaExtrato(arquivo)
@@ -83,6 +99,13 @@ export function PaginaUpload() {
         nomeEnviando={estado.fase === 'enviando' ? estado.nome : undefined}
         compacta={estado.fase === 'concluido'}
         onArquivo={enviar}
+        onVarios={(quantos) =>
+          setEstado({
+            fase: 'erro',
+            mensagem: `Você soltou ${quantos} arquivos. Envie um extrato por vez.`,
+            repetido: false,
+          })
+        }
       />
 
       {estado.fase === 'erro' && (
