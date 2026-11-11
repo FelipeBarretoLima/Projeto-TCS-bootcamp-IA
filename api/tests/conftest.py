@@ -23,6 +23,7 @@ def dir_privado(tmp_path, monkeypatch):
 def sem_modelo_real(tmp_path, monkeypatch):
     """Nunca usar o .pkl real nos testes: por padrão não há classificador."""
     monkeypatch.setattr(config, "CAMINHO_MODELO", tmp_path / "nao_existe.pkl")
+    monkeypatch.setattr(config, "CAMINHO_TREINO_BASE", tmp_path / "nao_existe.csv")
 
 
 @pytest.fixture(autouse=True)
@@ -43,6 +44,17 @@ def db():
     app.dependency_overrides[usuario_atual] = lambda: USUARIO
     yield falso
     app.dependency_overrides.clear()
+
+
+@pytest.fixture(autouse=True)
+def retreino_no_banco_falso(db, monkeypatch):
+    """Retreino com o banco falso e na hora (sem thread), para o teste ver o resultado."""
+    from contextlib import nullcontext
+
+    from api.servicos import retreino
+
+    monkeypatch.setattr(retreino, "abre_banco", lambda: nullcontext(db))
+    monkeypatch.setattr(retreino, "inicia_em_segundo_plano", lambda alvo: alvo())
 
 
 @pytest.fixture

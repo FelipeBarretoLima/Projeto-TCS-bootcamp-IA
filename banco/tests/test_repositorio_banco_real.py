@@ -94,3 +94,27 @@ def test_periodo_transacoes(db):
     db.grava_extrato(u, nome_arquivo="a.csv", hash_arquivo="h1", parser="p", periodo_inicio=None,
                      periodo_fim=None, transacoes=[_t(9), _t(2, "-1.00"), _t(30, "-2.00")])
     assert db.periodo_transacoes(u) == (date(2024, 1, 2), date(2024, 1, 30))
+
+
+def test_correcoes_e_historico_de_retreino(db):
+    u = _usuario(db)
+    db.grava_extrato(u, nome_arquivo="a.csv", hash_arquivo="h1", parser="p", periodo_inicio=None,
+                     periodo_fim=None, transacoes=[_t(2), _t(3, "-1.00")])
+    novas_antes = db.correcoes_desde_ultimo_treino()
+    todas_antes = len(db.correcoes_para_treino())
+    [a, b] = db._todas("select id from public.transacoes where usuario_id = %s order by id", u)
+    assert db.muda_categoria(u, a["id"], "mercado")
+    assert db.muda_categoria(u, b["id"], None)  # "sem categoria" não é exemplo de treino
+    assert db.correcoes_desde_ultimo_treino() == novas_antes + 1
+    nova = [c for c in db.correcoes_para_treino() if c["valor"] == Decimal("-8.94")][-1]
+    assert len(db.correcoes_para_treino()) == todas_antes + 1
+    assert nova["categoria"] == "mercado" and nova["corrigida_em"] is not None
+    assert "original_cifrado" not in nova
+
+    tid = db.inicia_treino()
+    assert db.treino_rodando()
+    db.conclui_treino(tid, status="ok", correcoes=1, linhas_treino=10, acerto_correcoes_antes=0,
+                      acerto_correcoes_depois=100, acerto_base_depois=98.5)
+    assert not db.treino_rodando() and db.treinos(1)[0]["status"] == "ok"
+    # o treino "ok" começou depois da correção: o contador zera
+    assert db.correcoes_desde_ultimo_treino() == 0

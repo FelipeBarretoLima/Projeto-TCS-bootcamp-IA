@@ -22,6 +22,8 @@ class BancoFalso:
         self.conversas, self.mensagens_ = {}, []
         self._ids = count(1)
         self._ids_transacao = count(1)
+        self.treinos_: list[dict] = []
+        self.confirmacoes = 0
 
     def garante_usuario(self, usuario_id, email, nome=""):
         self.usuarios.setdefault(usuario_id, {"id": usuario_id, "email": email, "nome": nome})
@@ -106,8 +108,38 @@ class BancoFalso:
         for t in self.linhas:
             if t.get("id") == transacao_id and t["usuario_id"] == usuario_id:
                 t["categoria"], t["origem_categoria"] = categoria, ("usuario" if categoria else None)
+                t["corrigida_em"] = datetime.now(timezone.utc) if categoria else None
                 return True
         return False
+
+    def confirma(self):
+        self.confirmacoes += 1
+
+    # --- retreino ---
+
+    def correcoes_para_treino(self):
+        return sorted((t for t in self.linhas if t.get("origem_categoria") == "usuario" and t["categoria"]),
+                      key=lambda t: t["corrigida_em"])
+
+    def correcoes_desde_ultimo_treino(self):
+        oks = [t["iniciado_em"] for t in self.treinos_ if t["status"] == "ok"]
+        desde = max(oks) if oks else datetime.min.replace(tzinfo=timezone.utc)
+        return sum(1 for t in self.linhas if t.get("origem_categoria") == "usuario" and t.get("corrigida_em")
+                   and t["corrigida_em"] > desde)
+
+    def treino_rodando(self):
+        return any(t["status"] == "rodando" for t in self.treinos_)
+
+    def inicia_treino(self):
+        self.treinos_.append({"id": len(self.treinos_) + 1, "status": "rodando",
+                              "iniciado_em": datetime.now(timezone.utc)})
+        return len(self.treinos_)
+
+    def conclui_treino(self, treino_id, **registro):
+        self.treinos_[treino_id - 1].update(registro)
+
+    def treinos(self, limite=20):
+        return list(reversed(self.treinos_))[:limite]
 
     def muda_nome(self, usuario_id, nome):
         if usuario_id in self.usuarios:
