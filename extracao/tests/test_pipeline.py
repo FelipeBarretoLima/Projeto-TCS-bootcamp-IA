@@ -161,6 +161,27 @@ def test_pipeline_ponta_a_ponta(tmp_path):
     assert (saida.parent / "u07.relatorio.csv").exists()
 
 
+def test_originais_acompanham_as_linhas_e_nao_vao_para_o_csv(tmp_path):
+    entrada = tmp_path / "raw"
+    _escreve(entrada, "a.fake", "\n".join([
+        "100.00;64.50",
+        "2024-01-02;Pix enviado;-20.00;CICLANO EXEMPLO;•••.456.789-••",
+        "2024-01-03;COMPRA DEBITO;-10.50;PADARIA MODELO 12.345.678/0001-90;",
+        "2024-01-04;PIX RECEBIDO;5.00;JOAO EXEMPLO ME;",  # ambíguo -> revisar: sem linha, sem original
+        "2024-01-05;TARIFA;-10.00;;",
+    ]))
+    saida = tmp_path / "saida" / "u07.csv"
+    ex = executa(entrada, "u07", saida, tmp_path / "privado", [ParserFake])
+    # um original por linha, na mesma ordem; o documento (CPF/CNPJ) não faz parte do original
+    assert [(l.contraparte, o["contraparte"]) for l, o in zip(ex.linhas, ex.originais, strict=True)] == [
+        ("PESSOA_FISICA", "CICLANO EXEMPLO"),
+        ("PADARIA MODELO", "PADARIA MODELO 12.345.678/0001-90"),
+        ("", ""),
+    ]
+    assert [o["historico"] for o in ex.originais] == ["PIX ENVIADO", "COMPRA DEBITO", "TARIFA"]
+    assert "CICLANO" not in saida.read_text("utf-8")  # o CSV do treino continua anonimizado
+
+
 def test_historico_desconhecido_rejeita_o_arquivo(tmp_path):
     entrada = tmp_path / "raw"
     _escreve(entrada, "a.fake", "0.00;-1.00\n2024-01-02;LANCAMENTO NOVO;-1.00;;")

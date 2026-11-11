@@ -38,7 +38,10 @@ def processa_extrato(conteudo: bytes, extensao: str, usuario: str) -> ResultadoU
 
     dados = asdict(execucao.relatorios[0])
     relatorio = Relatorio(**{campo: dados[campo] for campo in Relatorio.model_fields})
+    # o original (sem anonimizar) vai junto só para mostrar ao dono; ML e banco usam o anonimizado
     transacoes = [
-        Transacao(**linha.model_dump(exclude={"id_usuario"})) for linha in execucao.linhas
+        Transacao(**linha.model_dump(exclude={"id_usuario"}),
+                  historico_original=original["historico"], contraparte_original=original["contraparte"])
+        for linha, original in zip(execucao.linhas, execucao.originais, strict=True)
     ]
     return ResultadoUpload(relatorio=relatorio, transacoes=transacoes)

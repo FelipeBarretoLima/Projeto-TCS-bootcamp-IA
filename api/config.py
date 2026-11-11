@@ -12,7 +12,7 @@ load_dotenv(RAIZ_PROJETO / ".env")
 # Mapas do usuário (pessoas marcadas). A API só lê esta pasta, nunca grava nela.
 DIR_PRIVADO = RAIZ_PROJETO / "data" / "privado"
 
-# Classificador treinado (python -m ml.treinar). Fora do git; sem ele, fica só regra + mapa.
+# Classificador treinado (python -m ml.treinar). Fora do git; sem ele, as saídas ficam sem categoria.
 CAMINHO_MODELO = RAIZ_PROJETO / "ml" / "modelos" / "svm_tfidf.pkl"
 
 EXTENSOES_ACEITAS = frozenset({".pdf", ".csv"})
@@ -35,6 +35,12 @@ def _url_do_projeto() -> str:
 # --- login (Supabase Auth) ---
 SUPABASE_URL = _url_do_projeto()
 SUPABASE_PUBLISHABLE_KEY = os.environ.get("SUPABASE_PUBLISHABLE_KEY", "").strip()
+
+# --- texto original das transações (sem anonimizar), guardado cifrado no banco ---
+# Chave Fernet. Gere com: python -m api.cifra --nova-chave. A MESMA chave em todas as máquinas que
+# usam o mesmo banco; perdê-la = os originais já gravados não abrem mais (a tela mostra o anonimizado).
+# Vazia: nada original é gravado.
+CHAVE_ORIGINAIS = os.environ.get("CHAVE_ORIGINAIS", "").strip()
 
 # --- assistente (Gemini) ---
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "").strip()

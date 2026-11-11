@@ -228,7 +228,7 @@ Pílulas firmes e silenciosas.
 - **Ícone:** círculo de 2.5rem, transparente, ícone lucide de 20px em tinta suave; no hover ganha a superfície de cabeçalho e tinta.
 
 ### Chips
-- **Selo de categoria:** pílula azul-névoa, 0.875rem/500, 0.25rem × 0.8rem, sem quebra de linha. Abaixo dele, a origem da categoria ("regra fixa", "fora do mapa") em 0.75rem, tinta suave (ao lado no celular).
+- **Selo de categoria:** pílula azul-névoa, 0.875rem/500, 0.25rem × 0.8rem, sem quebra de linha. A origem da categoria (regra ou modelo) não aparece para o usuário.
 - **Sem categoria:** mesmo formato, fundo transparente, contorno interno de 1px na cor de borda, texto em tinta suave.
 
 ### Cards / Containers

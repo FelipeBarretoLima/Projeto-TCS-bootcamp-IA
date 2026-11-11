@@ -45,6 +45,9 @@ class Transacao(BaseModel):
     banco: str
     categoria: str | None = None  # uma das 8 classes de ml/classes.py; None = sem categoria
     origem_categoria: Literal["regra", "mapa", "modelo"] | None = None
+    # como veio no extrato, sem anonimizar: só para mostrar ao dono (ML e chat usam os campos acima)
+    historico_original: str | None = None
+    contraparte_original: str | None = None
 
 
 class TransacaoSalva(BaseModel):
@@ -58,6 +61,9 @@ class TransacaoSalva(BaseModel):
     meio: str
     banco: str
     categoria: str | None
+    # decifrados do banco; None = gravada sem chave ou com outra chave (mostra o anonimizado)
+    historico_original: str | None = None
+    contraparte_original: str | None = None
 
 
 class PeriodoTransacoes(BaseModel):

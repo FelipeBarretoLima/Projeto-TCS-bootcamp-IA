@@ -28,6 +28,9 @@ export type Transacao = {
   banco: string
   categoria: string | null // uma das 8 classes de ml/classes.py; null = sem categoria
   origem_categoria: 'regra' | 'mapa' | 'modelo' | null
+  // como veio no extrato, sem anonimizar (só o dono vê); null = mostra o anonimizado
+  historico_original?: string | null
+  contraparte_original?: string | null
 }
 
 /** Transação gravada na conta (aba Extrato): sem a origem da categoria. */

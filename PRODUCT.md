@@ -39,8 +39,8 @@ de qualquer saída e nada gravado no servidor.
 
 ## Capabilities and Constraints
 
-- Hoje a categoria vem de regras fixas e do mapa de estabelecimentos. O classificador treinado
-  ainda vai entrar, para as transações sem categoria.
+- Categoria: entradas são `receitas` por regra; todas as saídas são classificadas pelo modelo de
+  ML (SVM + TF-IDF). Regras fixas e mapa de estabelecimentos só geram os rótulos do treino.
 - Em espera até os classificadores ficarem prontos: resumo por categoria, filtros, exportar CSV
   e vários extratos de uma vez.
 - Um arquivo por envio, até 10 MB, `.pdf` ou `.csv`. Nada é guardado entre visitas.

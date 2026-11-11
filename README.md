@@ -46,6 +46,7 @@ O assistente nunca faz contas nem vê a lista de transações: o Gemini escolhe 
 | `SUPABASE_PUBLISHABLE_KEY` | Supabase > **Project Settings** > **API Keys** > Publishable key (`sb_publishable_...`) |
 | `GEMINI_API_KEY` | aistudio.google.com > **Get API key** |
 | `GEMINI_MODEL` | opcional; padrão `gemini-3.1-flash-lite` |
+| `CHAVE_ORIGINAIS` | cifra o texto original das transações (sem anonimizar), que só o dono vê. Gere com `python -m api.cifra --nova-chave` **uma vez** e passe a **mesma** chave para toda a equipe (por um canal privado, nunca no git). Sem ela, a tela mostra o texto anonimizado. Perder a chave = os originais já gravados não abrem mais. |
 
 `SUPABASE_URL` é deduzido do `DATABASE_URL`. Nunca faça commit do `.env` nem cole o conteúdo dele
 em chats.
@@ -102,10 +103,11 @@ Abra http://localhost:5173, crie uma conta, importe um extrato e converse com o 
 dashboard. O frontend precisa de **Node.js 22** (ou 20.19+). Antes da primeira vez, preencha o
 `.env` (acima) e crie as tabelas (abaixo). Depois de mudar o `.env`, reinicie a API.
 
-A API lê (sem gravar) os mapas de `data/privado/` para anonimizar e categorizar igual à linha de
-comando. A categoria vem, nesta ordem, da regra fixa, do mapa de estabelecimentos e, para o que
-sobrar, do classificador `ml/modelos/svm_tfidf.pkl` (gerado por `python -m ml.treinar`). Sem o mapa
-ou sem o `.pkl`, o passo correspondente é pulado.
+A API lê (sem gravar) os mapas de `data/privado/` só para anonimizar. A categoria vem de duas
+formas: toda **entrada** (dinheiro recebido) é `receitas`, por regra; toda **saída** é classificada
+pelo modelo `ml/modelos/svm_tfidf.pkl` (gerado por `python -m ml.treinar`). Sem o `.pkl`, as saídas
+ficam sem categoria. As regras fixas e o mapa de estabelecimentos só geram os rótulos do treino
+(`python -m ml.rotular`); o modelo aprendeu o que eles faziam.
 
 ## Banco de dados (Supabase)
 

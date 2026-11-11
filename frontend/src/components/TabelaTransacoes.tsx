@@ -27,24 +27,27 @@ export function TabelaTransacoes({ transacoes }: Props) {
           </tr>
         </thead>
         <tbody>
-          {transacoes.map((t, i) => (
-            <tr key={i}>
-              <td className={estilos.data}>{formataData(t.data)}</td>
-              <td className={estilos.descricao}>
-                <span className={estilos.principal}>
-                  {t.contraparte ? rotuloContraparte(t.contraparte) : t.historico}
-                </span>
-                <span className={estilos.detalhe}>
-                  {t.contraparte ? `${t.historico} · ` : ''}
-                  {rotuloMeio(t.meio)}
-                </span>
-              </td>
-              <td className={estilos.categoria}>
-                <BadgeCategoria categoria={t.categoria} />
-              </td>
-              <td className={`${estilos.numero} ${estilos[t.tipo]}`}>{formataValor(t.valor)}</td>
-            </tr>
-          ))}
+          {transacoes.map((t, i) => {
+            // o texto original (sem anonimizar) quando a API o tiver; senão, o anonimizado
+            const nome = t.contraparte_original || (t.contraparte ? rotuloContraparte(t.contraparte) : '')
+            const historico = t.historico_original || t.historico
+            return (
+              <tr key={i}>
+                <td className={estilos.data}>{formataData(t.data)}</td>
+                <td className={estilos.descricao}>
+                  <span className={estilos.principal}>{nome || historico}</span>
+                  <span className={estilos.detalhe}>
+                    {nome ? `${historico} · ` : ''}
+                    {rotuloMeio(t.meio)}
+                  </span>
+                </td>
+                <td className={estilos.categoria}>
+                  <BadgeCategoria categoria={t.categoria} />
+                </td>
+                <td className={`${estilos.numero} ${estilos[t.tipo]}`}>{formataValor(t.valor)}</td>
+              </tr>
+            )
+          })}
         </tbody>
       </table>
     </div>

@@ -25,6 +25,16 @@ def sem_modelo_real(tmp_path, monkeypatch):
 
 
 @pytest.fixture(autouse=True)
+def chave_originais(monkeypatch):
+    """Chave de teste para o texto original: nunca a do .env."""
+    from cryptography.fernet import Fernet
+
+    chave = Fernet.generate_key().decode()
+    monkeypatch.setattr(config, "CHAVE_ORIGINAIS", chave)
+    return chave
+
+
+@pytest.fixture(autouse=True)
 def db():
     """Banco em memória e um usuário logado em todas as rotas."""
     falso = BancoFalso()

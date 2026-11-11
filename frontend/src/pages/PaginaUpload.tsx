@@ -72,8 +72,9 @@ export function PaginaUpload() {
         <h1>Importar extrato</h1>
         <p>
           Arraste o PDF ou CSV do seu banco ou clique para selecionar. O arquivo é processado e
-          descartado na hora: só as transações, já anonimizadas, ficam salvas na sua conta para o
-          dashboard e o assistente.
+          descartado na hora: só as transações ficam salvas na sua conta. Você vê os nomes como
+          vieram do banco, guardados de forma criptografada; o classificador e o assistente só
+          usam a versão anonimizada.
         </p>
       </header>
 
