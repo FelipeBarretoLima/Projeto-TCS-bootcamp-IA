@@ -1,12 +1,28 @@
+import { Download } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { Link, useSearchParams } from 'react-router'
-import { ErroApi, buscaPeriodo, listaTransacoes } from '../api/cliente'
+import { ErroApi, buscaPeriodo, listaTransacoes, mudaCategoria } from '../api/cliente'
 import type { PeriodoTransacoes, TransacaoSalva } from '../api/tipos'
 import { AvisoRejeicao } from '../components/AvisoRejeicao'
 import { CampoData } from '../components/CampoData'
 import { TabelaTransacoes } from '../components/TabelaTransacoes'
-import { LISTA_CATEGORIAS, formataMoeda, plural } from '../utils/formatacao'
+import { baixaCsv } from '../utils/exportacao'
+import { LISTA_CATEGORIAS, formataMoeda, plural, rotuloContraparte } from '../utils/formatacao'
 import estilos from './PaginaExtrato.module.css'
+
+/** Linhas mostradas por vez (o resto entra com "Mostrar mais"). */
+const POR_PAGINA = 100
+
+/** Sem acentos e em minúsculas: "Padaria São João" acha "sao joao". */
+function normaliza(texto: string): string {
+  return texto.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase()
+}
+
+function casaBusca(t: TransacaoSalva, termo: string): boolean {
+  // o texto que a tabela mostra (original, quando houver) e também o anonimizado
+  const textos = [t.contraparte_original, t.historico_original, rotuloContraparte(t.contraparte), t.historico]
+  return normaliza(textos.filter(Boolean).join(' ')).includes(termo)
+}
 
 /** Última resposta da API e para quais filtros ela veio (outros filtros = ainda carregando). */
 type Resposta =
@@ -20,17 +36,23 @@ const SEM_CATEGORIA = 'sem_categoria'
 // os filtros da última visita (a aba do cabeçalho abre /extrato sem eles)
 const CHAVE_FILTROS = 'tas:filtros-extrato'
 
-function filtrosSalvos(): string | null {
+/** Filtros guardados junto com a última transação que existia quando foram usados. */
+type FiltrosGuardados = { busca: string; ultima: string | null }
+
+/** Os filtros da última visita, se ainda valem: com transações novas (outro extrato importado,
+ *  outra conta na mesma aba), volta ao padrão para as novas não ficarem escondidas. */
+function filtrosSalvos(ultima: string | null): string | null {
   try {
-    return sessionStorage.getItem(CHAVE_FILTROS)
+    const guardados = JSON.parse(sessionStorage.getItem(CHAVE_FILTROS) ?? 'null') as FiltrosGuardados | null
+    return guardados && guardados.ultima === ultima ? guardados.busca : null
   } catch {
     return null
   }
 }
 
-function salvaFiltros(busca: string) {
+function salvaFiltros(busca: string, ultima: string | null) {
   try {
-    sessionStorage.setItem(CHAVE_FILTROS, busca)
+    sessionStorage.setItem(CHAVE_FILTROS, JSON.stringify({ busca, ultima } satisfies FiltrosGuardados))
   } catch {
     // sem sessionStorage (aba privada etc.): só não lembra os filtros
   }
@@ -48,6 +70,7 @@ export function PaginaExtrato() {
   const inicio = params.get('inicio') ?? ''
   const fim = params.get('fim') ?? ''
   const categoria = params.get('categoria') ?? ''
+  const textoBusca = params.get('busca') ?? ''
   const periodoInvertido = Boolean(inicio && fim && inicio > fim)
 
   const [periodo, setPeriodo] = useState<PeriodoTransacoes | null>(null)
@@ -60,7 +83,7 @@ export function PaginaExtrato() {
       .then((p) => {
         setPeriodo(p)
         if (!abriuSemFiltros.current) return
-        const salvos = filtrosSalvos()
+        const salvos = filtrosSalvos(p.ultima)
         if (salvos !== null) setParams(new URLSearchParams(salvos), { replace: true })
         else if (p.padrao_inicio && p.padrao_fim)
           setParams({ inicio: p.padrao_inicio, fim: p.padrao_fim }, { replace: true })
@@ -71,7 +94,7 @@ export function PaginaExtrato() {
   // lembra os filtros para a próxima vez que a aba abrir
   const busca = params.toString()
   useEffect(() => {
-    if (periodo) salvaFiltros(busca)
+    if (periodo) salvaFiltros(busca, periodo.ultima)
   }, [busca, periodo])
 
   // 2º passo: busca as transações (só depois do padrão aplicado, para não buscar tudo à toa)
@@ -92,7 +115,42 @@ export function PaginaExtrato() {
     return () => controle.abort()
   }, [periodo, chave, inicio, fim, categoria, periodoInvertido])
 
-  function muda(novos: { inicio?: string; fim?: string; categoria?: string }) {
+  // paginação: volta para as primeiras linhas quando o filtro muda
+  const [limite, setLimite] = useState({ chave: '', linhas: POR_PAGINA })
+  const chaveLista = `${chave}|${textoBusca}`
+  const linhasVisiveis = limite.chave === chaveLista ? limite.linhas : POR_PAGINA
+
+  // correção de categoria: muda na tela na hora e volta atrás se a API recusar
+  const [salvando, setSalvando] = useState<ReadonlySet<number>>(new Set())
+  const [erroCategoria, setErroCategoria] = useState<string | null>(null)
+
+  function trocaNaResposta(id: number, categoria: string | null) {
+    setResposta((r) =>
+      r?.fase === 'pronto'
+        ? { ...r, transacoes: r.transacoes.map((t) => (t.id === id ? { ...t, categoria } : t)) }
+        : r,
+    )
+  }
+
+  async function corrigeCategoria(t: TransacaoSalva, nova: string | null) {
+    setErroCategoria(null)
+    setSalvando((s) => new Set(s).add(t.id))
+    trocaNaResposta(t.id, nova)
+    try {
+      await mudaCategoria(t.id, nova)
+    } catch (e) {
+      trocaNaResposta(t.id, t.categoria)
+      setErroCategoria(mensagemDe(e, 'Não foi possível salvar a categoria. Tente de novo.'))
+    } finally {
+      setSalvando((s) => {
+        const resto = new Set(s)
+        resto.delete(t.id)
+        return resto
+      })
+    }
+  }
+
+  function muda(novos: { inicio?: string; fim?: string; categoria?: string; busca?: string }) {
     setParams(
       (anteriores) => {
         const p = new URLSearchParams(anteriores)
@@ -110,9 +168,18 @@ export function PaginaExtrato() {
   const eSeisMeses = temDados && inicio === periodo?.padrao_inicio && fim === periodo?.padrao_fim
   const eTudo = temDados && ((inicio === periodo?.primeira && fim === periodo?.ultima) || (!inicio && !fim))
 
-  const transacoes = estado.fase === 'pronto' ? estado.transacoes : []
-  const entradas = transacoes.filter((t) => t.tipo === 'entrada').reduce((s, t) => s + Number(t.valor), 0)
-  const saidas = transacoes.filter((t) => t.tipo === 'saida').reduce((s, t) => s + Number(t.valor), 0)
+  const termo = normaliza(textoBusca.trim())
+  const doPeriodo = estado.fase === 'pronto' ? estado.transacoes : []
+  const transacoes = termo ? doPeriodo.filter((t) => casaBusca(t, termo)) : doPeriodo
+  const visiveis = transacoes.slice(0, linhasVisiveis)
+  // como no dashboard: pagar a fatura, investir ou mover dinheiro entre contas (categoria Financeiro)
+  // não entra nos totais, senão a compra no cartão e o pagamento da fatura contam duas vezes.
+  // Filtrando só Financeiro, os totais mostram essas próprias transações.
+  const somaFinanceiro = categoria === 'financeiro'
+  const nosTotais = transacoes.filter((t) => somaFinanceiro || t.categoria !== 'financeiro')
+  const foraDosTotais = transacoes.length - nosTotais.length
+  const entradas = nosTotais.filter((t) => t.tipo === 'entrada').reduce((s, t) => s + Number(t.valor), 0)
+  const saidas = nosTotais.filter((t) => t.tipo === 'saida').reduce((s, t) => s + Number(t.valor), 0)
 
   if (erroPeriodo) {
     return (
@@ -192,6 +259,16 @@ export function PaginaExtrato() {
               <option value={SEM_CATEGORIA}>Sem categoria</option>
             </select>
           </label>
+          <label className={`${estilos.campo} ${estilos.campoBusca}`}>
+            <span>Buscar</span>
+            <input
+              type="search"
+              value={textoBusca}
+              onChange={(e) => muda({ busca: e.target.value })}
+              placeholder="Estabelecimento ou descrição"
+              maxLength={80}
+            />
+          </label>
         </div>
       </form>
 
@@ -221,18 +298,65 @@ export function PaginaExtrato() {
                 <span>
                   Saídas <b className={estilos.saida}>{formataMoeda(saidas)}</b>
                 </span>
+                <button
+                  type="button"
+                  className={estilos.exportar}
+                  onClick={() => baixaCsv(transacoes, nomeDoArquivo(inicio, fim))}
+                  title="Baixar estas transações numa planilha (CSV)"
+                >
+                  <Download size={16} aria-hidden="true" /> Exportar CSV
+                </button>
+                {foraDosTotais > 0 && (
+                  <small className={estilos.notaTotais}>
+                    Sem {plural(foraDosTotais, 'transação', 'transações')} da categoria Financeiro (fatura,
+                    investimentos), como no dashboard.
+                  </small>
+                )}
               </>
             )}
           </div>
+          {erroCategoria && (
+            <p className={estilos.erroCategoria} role="alert">
+              {erroCategoria}
+            </p>
+          )}
           {transacoes.length === 0 ? (
-            <p className={estilos.semResultado}>Nenhuma transação com esses filtros.</p>
+            <p className={estilos.semResultado}>
+              {termo ? `Nenhuma transação com “${textoBusca.trim()}” nesses filtros.` : 'Nenhuma transação com esses filtros.'}
+            </p>
           ) : (
-            <TabelaTransacoes transacoes={transacoes} />
+            <>
+              <TabelaTransacoes
+                transacoes={visiveis}
+                onMudaCategoria={(t, c) => void corrigeCategoria(t, c)}
+                salvando={salvando}
+              />
+              {transacoes.length > visiveis.length && (
+                <div className={estilos.mais}>
+                  <span>
+                    Mostrando {visiveis.length} de {transacoes.length}
+                  </span>
+                  <button
+                    type="button"
+                    className={estilos.atalho}
+                    onClick={() => setLimite({ chave: chaveLista, linhas: linhasVisiveis + POR_PAGINA })}
+                  >
+                    Mostrar mais {Math.min(POR_PAGINA, transacoes.length - visiveis.length)}
+                  </button>
+                </div>
+              )}
+            </>
           )}
         </section>
       )}
     </div>
   )
+}
+
+/** "transacoes_2024-01-01_a_2024-06-30.csv" */
+function nomeDoArquivo(inicio: string, fim: string): string {
+  const periodo = inicio && fim ? `_${inicio}_a_${fim}` : inicio ? `_desde_${inicio}` : fim ? `_ate_${fim}` : ''
+  return `transacoes${periodo}.csv`
 }
 
 function Topo() {

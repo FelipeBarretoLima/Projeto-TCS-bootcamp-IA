@@ -8,9 +8,11 @@ type Props = {
   /** já existe um resultado na tela: a zona encolhe para a tabela subir */
   compacta?: boolean
   onArquivo: (arquivo: File) => void
+  /** Vários arquivos soltos de uma vez: nenhum é enviado. */
+  onVarios?: (quantos: number) => void
 }
 
-export function ZonaUpload({ enviando, nomeEnviando, compacta = false, onArquivo }: Props) {
+export function ZonaUpload({ enviando, nomeEnviando, compacta = false, onArquivo, onVarios }: Props) {
   const entrada = useRef<HTMLInputElement>(null)
   const [arrastando, setArrastando] = useState(false)
 
@@ -21,8 +23,10 @@ export function ZonaUpload({ enviando, nomeEnviando, compacta = false, onArquivo
   function soltar(evento: DragEvent) {
     evento.preventDefault()
     setArrastando(false)
-    const arquivo = evento.dataTransfer.files[0]
-    if (arquivo && !enviando) onArquivo(arquivo)
+    if (enviando) return
+    const { files } = evento.dataTransfer
+    if (files.length > 1) onVarios?.(files.length)
+    else if (files[0]) onArquivo(files[0])
   }
 
   const classes = [

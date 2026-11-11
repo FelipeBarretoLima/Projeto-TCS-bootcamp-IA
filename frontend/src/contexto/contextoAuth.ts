@@ -14,6 +14,13 @@ export type Contexto = {
   entra: (email: string, senha: string) => Promise<void>
   cadastra: (nome: string, email: string, senha: string) => Promise<'logado' | 'confirmar_email'>
   recupera: (email: string) => Promise<void>
+  /** Grava a senha nova (precisa da sessão aberta pelo link de recuperação). */
+  trocaSenha: (senha: string) => Promise<void>
+  /** Nome do perfil (login e banco). */
+  mudaNome: (nome: string) => Promise<void>
+  /** Apaga a conta e tudo o que é dela, e sai. */
+  apagaConta: () => Promise<void>
+  email: string
   sai: () => Promise<void>
 }
 

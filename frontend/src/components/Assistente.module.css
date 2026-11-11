@@ -131,6 +131,68 @@
   color: var(--vermelho);
 }
 
+.renomear {
+  flex: 1;
+  min-width: 0;
+  margin: 0.15rem;
+  padding: 0.4rem 0.55rem;
+  border: 1px solid var(--azul);
+  border-radius: 8px;
+  background: var(--superficie);
+  color: var(--tinta);
+  font: inherit;
+  font-size: 0.875rem;
+}
+
+.renomear:focus-visible {
+  outline: none;
+}
+
+.apagar:disabled {
+  cursor: not-allowed;
+  color: var(--tinta-suave);
+}
+
+/* "Apagar esta conversa?" no lugar do título */
+.conversas li.confirmacao {
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  padding: 0.45rem 0.55rem;
+  background: var(--superficie-cabecalho);
+  font-size: 0.8125rem;
+  color: var(--tinta);
+}
+
+.confirmacao span {
+  flex-basis: 100%;
+}
+
+.cancelar,
+.confirmar {
+  padding: 0.25rem 0.75rem;
+  border-radius: 999px;
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.cancelar {
+  border: 1px solid var(--borda);
+  background: none;
+  color: var(--tinta);
+}
+
+.confirmar {
+  border: 1px solid var(--vermelho);
+  background: var(--vermelho);
+  color: #fff;
+}
+
+.confirmar:disabled {
+  cursor: progress;
+  opacity: 0.7;
+}
+
 /* --- mensagens --- */
 
 .chat {

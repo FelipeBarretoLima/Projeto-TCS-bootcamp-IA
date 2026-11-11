@@ -168,6 +168,74 @@
   font-variant-numeric: tabular-nums;
 }
 
+.notaTotais {
+  flex-basis: 100%;
+  font-size: 0.8125rem;
+}
+
+.campoBusca {
+  flex: 1;
+}
+
+.campo input {
+  height: 2.75rem;
+  padding: 0 0.85rem;
+  border: 1px solid var(--borda);
+  border-radius: var(--raio);
+  background: var(--fundo);
+  color: var(--tinta);
+  font: inherit;
+}
+
+.campo input:focus-visible {
+  outline: 2px solid var(--azul);
+  outline-offset: 2px;
+}
+
+.exportar {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  margin-left: auto;
+  padding: 0.4rem 0.95rem;
+  border: 1px solid var(--borda);
+  border-radius: 999px;
+  background: none;
+  color: var(--tinta);
+  font: inherit;
+  font-size: 0.875rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.exportar:hover {
+  border-color: var(--azul);
+}
+
+.exportar:focus-visible {
+  outline: 2px solid var(--azul);
+  outline-offset: 2px;
+}
+
+.erroCategoria {
+  margin: 0;
+  padding: 0.75rem 1.75rem;
+  background: var(--vermelho-fundo);
+  color: var(--vermelho);
+}
+
+.mais {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 0.75rem 1rem;
+  padding: 1rem 1.75rem;
+  border-top: 1px solid var(--borda);
+  color: var(--tinta-suave);
+  font-size: 0.9375rem;
+}
+
 .entrada {
   color: var(--verde);
 }

@@ -99,3 +99,42 @@
     grid-template-columns: 1fr;
   }
 }
+
+.carregando {
+  margin: 0;
+  color: var(--tinta-suave);
+}
+
+.escolheMes {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.6rem;
+  justify-self: start;
+}
+
+.escolheMes span {
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--tinta-suave);
+}
+
+.escolheMes select {
+  height: 2.5rem;
+  padding: 0 0.85rem;
+  border: 1px solid var(--borda);
+  border-radius: var(--raio);
+  background: var(--superficie);
+  color: var(--tinta);
+  font: inherit;
+  color-scheme: light dark;
+}
+
+.escolheMes select:focus-visible {
+  outline: 2px solid var(--azul);
+  outline-offset: 2px;
+}
+
+.atualizando {
+  opacity: 0.55;
+  transition: opacity 0.15s ease-out;
+}

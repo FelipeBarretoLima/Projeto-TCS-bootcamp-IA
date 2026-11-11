@@ -73,6 +73,13 @@
   color: var(--tinta);
 }
 
+/* "Minha conta" aberta */
+.iconeAtivo,
+.iconeAtivo:hover {
+  background: var(--superficie-cabecalho);
+  color: var(--azul-texto);
+}
+
 @media (max-width: 720px) {
   /* celular: marca e ações na primeira linha, as abas numa linha própria embaixo */
   .conteudo {

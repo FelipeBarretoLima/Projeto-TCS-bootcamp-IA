@@ -13,12 +13,23 @@ export function PaginaDashboard() {
   const { nome } = useAutenticacao()
   const [painel, setPainel] = useState<Painel | null>(null)
   const [erro, setErro] = useState<string | null>(null)
+  const [mesEscolhido, setMesEscolhido] = useState<string | undefined>(undefined) // undefined = o mais recente
+  const [trocandoMes, setTrocandoMes] = useState(false)
 
   useEffect(() => {
-    buscaPainel()
-      .then(setPainel)
-      .catch((e) => setErro(e instanceof ErroApi ? e.message : 'Não foi possível carregar o dashboard.'))
-  }, [])
+    let ativo = true
+    buscaPainel(mesEscolhido)
+      .then((p) => {
+        if (!ativo) return
+        setPainel(p)
+        setErro(null)
+      })
+      .catch((e) => ativo && setErro(e instanceof ErroApi ? e.message : 'Não foi possível carregar o dashboard.'))
+      .finally(() => ativo && setTrocandoMes(false))
+    return () => {
+      ativo = false
+    }
+  }, [mesEscolhido])
 
   const mes = painel?.mes ? ` (${painel.mes})` : ''
 
@@ -31,6 +42,12 @@ export function PaginaDashboard() {
 
       {erro && <AvisoRejeicao titulo="Não foi possível carregar o dashboard" mensagem={erro} />}
 
+      {!painel && !erro && (
+        <p className={estilos.carregando} role="status">
+          Carregando seus números…
+        </p>
+      )}
+
       {painel && !painel.tem_dados && (
         <div className={estilos.vazio}>
           <p>Você ainda não importou nenhum extrato. Importe o primeiro para ver seus números aqui.</p>
@@ -42,7 +59,27 @@ export function PaginaDashboard() {
 
       {painel?.tem_dados && (
         <>
-          <div className={estilos.cartoes}>
+          {painel.meses.length > 1 && (
+            <label className={estilos.escolheMes}>
+              <span>Mês</span>
+              <select
+                value={painel.mes_valor ?? ''}
+                onChange={(e) => {
+                  setTrocandoMes(true)
+                  setMesEscolhido(e.target.value)
+                }}
+                disabled={trocandoMes}
+              >
+                {painel.meses.map((m, i) => (
+                  <option key={m.valor} value={m.valor}>
+                    {m.rotulo}
+                    {i === 0 ? ' (mais recente)' : ''}
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
+          <div className={trocandoMes ? `${estilos.cartoes} ${estilos.atualizando}` : estilos.cartoes}>
             <div className={estilos.cartao}>
               <span>Receitas{mes}</span>
               <strong className={estilos.positivo}>{formataMoeda(painel.receitas)}</strong>
@@ -61,7 +98,7 @@ export function PaginaDashboard() {
 
           {painel.grafico && (
             <section className={estilos.cartaoGrafico}>
-              <h2>Receitas x Despesas (últimos 6 meses)</h2>
+              <h2>Receitas x Despesas (6 meses até {painel.mes})</h2>
               <Grafico dados={painel.grafico} altura={300} mostraTitulo={false} />
             </section>
           )}
