@@ -12,6 +12,7 @@ from .. import cifra
 from ..autenticacao import Usuario, usuario_atual
 from ..dependencias import banco
 from ..esquemas import NovaCategoria, PeriodoTransacoes, TransacaoSalva
+from ..servicos import retreino
 
 router = APIRouter(tags=["transacoes"])
 
@@ -80,9 +81,16 @@ def muda_categoria(
     usuario: Annotated[Usuario, Depends(usuario_atual)],
     db: Annotated[Banco, Depends(banco)],
 ) -> Response:
-    """O usuário corrige a categoria (vale para o dashboard e o assistente). None = sem categoria."""
+    """O usuário corrige a categoria (vale para o dashboard e o assistente). None = sem categoria.
+
+    A correção também vira exemplo de treino: a cada 15 novas, o modelo é retreinado em segundo
+    plano (api/servicos/retreino.py).
+    """
     if nova.categoria is not None and nova.categoria not in {c.value for c in Categoria}:
         raise HTTPException(400, "categoria inválida")
     if not db.muda_categoria(usuario.id, transacao_id, nova.categoria):
         raise HTTPException(404, "transação não encontrada")
+    # grava já: o retreino roda noutra conexão e precisa ver esta correção
+    db.confirma()
+    retreino.dispara_se_preciso(db)
     return Response(status_code=204)

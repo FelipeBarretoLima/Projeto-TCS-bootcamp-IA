@@ -42,6 +42,27 @@ compras em estabelecimento, do mapa revisado à mão em `data/privado/estabeleci
 `data/privado/estabelecimentos_novos.csv` (classe em branco = aceita a sugerida). Estabelecimentos que
 ainda não estão no mapa entram no fim de `estabelecimentos_novos.csv` a cada rotulagem.
 
+## Retreino com as correções dos usuários
+
+Na aba Extrato o usuário corrige a categoria de uma transação (origem `usuario`). A cada **15
+correções novas** (de todos os usuários) desde o último retreino, a API treina o modelo de novo em
+segundo plano e troca o `.pkl` (o anterior fica em `svm_tfidf.anterior.pkl`):
+
+- treino = CSV rotulado base (`ml/dados/transacoes_rotuladas.csv`) + as correções (`ml/retreinar.py`);
+- cada correção pesa 5 e substitui o rótulo automático do mesmo estabelecimento no CSV base (menos
+  `PESSOA_FISICA` e contraparte vazia); correções que discordam: vale a mais recente;
+- só campos anonimizados entram no treino (nunca o texto original cifrado);
+- o modelo novo entra sempre; cada retreino fica registrado na tabela `treinos_modelo` (acerto nas
+  correções antes/depois e no CSV base).
+
+```bash
+python -m api.retreinar              # força um retreino agora
+python -m api.retreinar --historico  # últimos retreinos e seus acertos
+```
+
+O CSV base precisa estar na máquina que roda a API (fica fora do git); sem ele, o retreino é
+registrado com erro e a correção do usuário continua valendo normalmente.
+
 ## Usar o modelo
 
 O pré-processamento está dentro do `.pkl`: ele recebe o CSV do parser como está e devolve a categoria.

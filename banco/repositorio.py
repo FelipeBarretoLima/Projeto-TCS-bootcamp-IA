@@ -44,6 +44,10 @@ class Banco:
     def __init__(self, conexao: psycopg.Connection):
         self.con = conexao
 
+    def confirma(self) -> None:
+        """Commit antes do fim da requisição (ex.: a correção precisa estar gravada antes do retreino)."""
+        self.con.commit()
+
     def _todas(self, sql: str, *args: Any) -> list[dict[str, Any]]:
         with self.con.cursor(row_factory=dict_row) as cur:
             return cur.execute(sql, args).fetchall()
@@ -188,10 +192,51 @@ class Banco:
         """Correção feita pelo usuário (origem "usuario"); None = sem categoria. False se não for dele."""
         cur = self.con.execute(
             "update public.transacoes set categoria = %s, "
-            "origem_categoria = case when %s::text is null then null else 'usuario' end "
+            "origem_categoria = case when %s::text is null then null else 'usuario' end, "
+            "corrigida_em = case when %s::text is null then null else now() end "
             "where id = %s and usuario_id = %s",
-            (categoria, categoria, transacao_id, usuario_id))
+            (categoria, categoria, categoria, transacao_id, usuario_id))
         return cur.rowcount > 0
+
+    # --- retreino do classificador (api/servicos/retreino.py) ---
+    # Exceção à regra "toda função filtra pelo usuário": o modelo é um só, treinado com as correções
+    # de todos. Só campos anonimizados saem daqui (nunca original_cifrado).
+
+    def correcoes_para_treino(self) -> list[dict[str, Any]]:
+        """Todas as correções dos usuários, como exemplos de treino (contrato do parser + categoria)."""
+        return self._todas(
+            "select data, historico, contraparte, valor, tipo, meio, banco, categoria, corrigida_em "
+            "from public.transacoes where origem_categoria = 'usuario' and categoria is not null "
+            "order by corrigida_em, id")
+
+    def correcoes_desde_ultimo_treino(self) -> int:
+        """Correções feitas depois do início do último retreino que deu certo (todas, se nunca houve)."""
+        return self._uma(
+            "select count(*) as n from public.transacoes where origem_categoria = 'usuario' "
+            "and corrigida_em > coalesce((select max(iniciado_em) from public.treinos_modelo "
+            "where status = 'ok'), '-infinity')")["n"]
+
+    def treino_rodando(self) -> bool:
+        """Há retreino em andamento? (um "rodando" de mais de 30 min é considerado travado)"""
+        return self._uma(
+            "select 1 from public.treinos_modelo where status = 'rodando' "
+            "and iniciado_em > now() - interval '30 minutes'") is not None
+
+    def inicia_treino(self) -> int:
+        return self._uma("insert into public.treinos_modelo default values returning id")["id"]
+
+    def conclui_treino(self, treino_id: int, *, status: str, correcoes: int = 0, linhas_treino: int = 0,
+                       acerto_correcoes_antes: float | None = None, acerto_correcoes_depois: float | None = None,
+                       acerto_base_depois: float | None = None, mensagem: str = "") -> None:
+        self.con.execute(
+            "update public.treinos_modelo set concluido_em = now(), status = %s, correcoes = %s, "
+            "linhas_treino = %s, acerto_correcoes_antes = %s, acerto_correcoes_depois = %s, "
+            "acerto_base_depois = %s, mensagem = %s where id = %s",
+            (status, correcoes, linhas_treino, acerto_correcoes_antes, acerto_correcoes_depois,
+             acerto_base_depois, mensagem[:500], treino_id))
+
+    def treinos(self, limite: int = 20) -> list[dict[str, Any]]:
+        return self._todas("select * from public.treinos_modelo order by iniciado_em desc limit %s", limite)
 
     # --- conversas do assistente ---
 

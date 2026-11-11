@@ -14,6 +14,8 @@ DIR_PRIVADO = RAIZ_PROJETO / "data" / "privado"
 
 # Classificador treinado (python -m ml.treinar). Fora do git; sem ele, as saídas ficam sem categoria.
 CAMINHO_MODELO = RAIZ_PROJETO / "ml" / "modelos" / "svm_tfidf.pkl"
+# CSV rotulado base (python -m ml.rotular), fora do git: o retreino soma a ele as correções dos usuários
+CAMINHO_TREINO_BASE = RAIZ_PROJETO / "ml" / "dados" / "transacoes_rotuladas.csv"
 
 # página compilada (npm run build em frontend/): se existir, a API também serve a página
 DIR_FRONTEND = RAIZ_PROJETO / "frontend" / "dist"
