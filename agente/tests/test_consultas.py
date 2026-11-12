@@ -46,6 +46,10 @@ def test_gastos_por_categoria_ordenado_com_percentual(df):
     cats = r.dados["categorias"]
     assert [x["categoria"] for x in cats] == ["compras", "alimentacao_fora", "sem_categoria"]
     assert r.dados["total_gasto"] == 1110.0 and cats[0]["percentual"] == 81.08
+    # pizza: uma fatia por categoria, na mesma ordem, com os totais
+    assert r.grafico["tipo"] == "pizza"
+    assert r.grafico["rotulos"] == ["Compras", "Alimentação fora", "Sem categoria"]
+    assert r.grafico["series"][0]["valores"] == [x["total"] for x in cats]
 
 
 def test_receitas_x_despesas_e_saldo(df):

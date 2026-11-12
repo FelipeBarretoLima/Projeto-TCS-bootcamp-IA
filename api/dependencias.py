@@ -25,12 +25,13 @@ _modelo = None
 
 
 def modelo_do_assistente():
-    """O chat model do Gemini (criado uma vez)."""
+    """Os modelos do Gemini: principal + reservas (criados uma vez)."""
     global _modelo
     if not config.GEMINI_API_KEY:
         raise HTTPException(503, "assistente não configurado: preencha GEMINI_API_KEY no .env")
     if _modelo is None:
-        from agente.assistente import modelo_gemini
+        from agente.assistente import modelos_gemini
 
-        _modelo = modelo_gemini(config.GEMINI_API_KEY, config.GEMINI_MODEL)
+        _modelo = modelos_gemini(config.GEMINI_API_KEY, config.GEMINI_MODEL, config.GEMINI_MODELOS_RESERVA,
+                                 config.GEMINI_TIMEOUT)
     return _modelo

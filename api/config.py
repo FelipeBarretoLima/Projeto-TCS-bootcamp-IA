@@ -49,7 +49,14 @@ CHAVE_ORIGINAIS = os.environ.get("CHAVE_ORIGINAIS", "").strip()
 
 # --- assistente (Gemini) ---
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "").strip()
-GEMINI_MODEL = os.environ.get("GEMINI_MODEL", "").strip() or "gemini-3.1-flash-lite"
+# medido em 2026-11-11 (mesmas perguntas, 3 vezes): 3.5-flash-lite ~2,5 s e estável; 3.1-flash-lite
+# chegou a 11-39 s e deu 503 ("high demand"). Se o principal falhar, os reservas são tentados em ordem.
+GEMINI_MODEL = os.environ.get("GEMINI_MODEL", "").strip() or "gemini-3.5-flash-lite"
+GEMINI_MODELOS_RESERVA = [m.strip() for m in os.environ.get(
+    "GEMINI_MODELOS_RESERVA", "gemini-3.6-flash,gemini-3.1-flash-lite").split(",") if m.strip()]
+# segundos de espera por modelo antes de passar para o próximo (sem novas tentativas no mesmo);
+# uma chamada normal leva 1-3 s
+GEMINI_TIMEOUT = float(os.environ.get("GEMINI_TIMEOUT", "").strip() or 10)
 
 # --- publicação ---
 # domínios de onde a página pode chamar a API, separados por vírgula (só se a página estiver em

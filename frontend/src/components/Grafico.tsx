@@ -73,6 +73,10 @@ export function Grafico({ dados, altura = 300, mostraTitulo = true }: Props) {
   let grafico
   if (dados.tipo === 'pizza') {
     const fatias = dados.rotulos.map((rotulo, i) => ({ rotulo, valor: dados.series[0]?.valores[i] ?? 0 }))
+    const total = fatias.reduce((s, f) => s + f.valor, 0)
+    // fatia: valor e quanto ela representa do total ("R$ 300,00 · 27%")
+    const formataFatia = (v: unknown) =>
+      total > 0 ? `${formata(v)} · ${Math.round((100 * Number(v)) / total)}%` : formata(v)
     grafico = (
       <PieChart>
         <Pie data={fatias} dataKey="valor" nameKey="rotulo" innerRadius="45%" outerRadius="80%" paddingAngle={1}>
@@ -80,7 +84,7 @@ export function Grafico({ dados, altura = 300, mostraTitulo = true }: Props) {
             <Cell key={f.rotulo} fill={cor(i)} stroke="var(--superficie)" />
           ))}
         </Pie>
-        <Tooltip {...dica} formatter={formata} />
+        <Tooltip {...dica} formatter={formataFatia} />
         <Legend wrapperStyle={{ fontSize: 13 }} />
       </PieChart>
     )
