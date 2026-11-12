@@ -118,3 +118,57 @@ def test_correcoes_e_historico_de_retreino(db):
     assert not db.treino_rodando() and db.treinos(1)[0]["status"] == "ok"
     # o treino "ok" começou depois da correção: o contador zera
     assert db.correcoes_desde_ultimo_treino() == 0
+
+
+_TENTA_TRAVA_DO_USUARIO = "select pg_try_advisory_xact_lock(hashtextextended(%s::text, 0))"
+
+
+def test_importacao_trava_so_o_mesmo_usuario_ate_o_commit(db):
+    u = _usuario(db)
+    db.grava_extrato(u, nome_arquivo="a.csv", hash_arquivo="h-trava", parser="p", periodo_inicio=None,
+                     periodo_fim=None, transacoes=[_t(5)])
+    # outra conexão (outra requisição) enquanto a primeira importação não terminou
+    outra = psycopg.connect(url_do_banco(), prepare_threshold=None)
+    try:
+        assert outra.execute(_TENTA_TRAVA_DO_USUARIO, (str(u),)).fetchone()[0] is False
+        assert outra.execute(_TENTA_TRAVA_DO_USUARIO, (str(uuid.uuid4()),)).fetchone()[0] is True
+    finally:
+        outra.rollback()
+        outra.close()
+
+
+def test_um_retreino_por_vez_mesmo_em_outra_conexao(db):
+    assert db.inicia_treino_se_livre() is not None
+    outra = psycopg.connect(url_do_banco(), prepare_threshold=None)
+    try:
+        outra.execute("set lock_timeout = '500ms'")
+        with pytest.raises(psycopg.errors.LockNotAvailable):
+            Banco(outra).inicia_treino_se_livre()  # espera a trava em vez de iniciar outro
+    finally:
+        outra.rollback()
+        outra.close()
+
+
+def _correcoes(db, u):
+    return db._todas("select transacao_id, categoria from public.correcoes where usuario_id = %s order by id", u)
+
+
+def test_correcao_sobrevive_a_exclusao_do_extrato(db):
+    """Exige a migração 0005 aplicada (python -m database.migrate)."""
+    u = _usuario(db)
+    g = db.grava_extrato(u, nome_arquivo="a.csv", hash_arquivo="h-corr-1", parser="p", periodo_inicio=None,
+                         periodo_fim=None, transacoes=[_t(5)])
+    [t] = db.busca_transacoes(u)
+    assert db.muda_categoria(u, t["id"], "mercado")
+    assert db.muda_categoria(u, t["id"], "compras")  # corrigir de novo atualiza a mesma linha
+    assert _correcoes(db, u) == [{"transacao_id": t["id"], "categoria": "compras"}]
+    assert db.apaga_extrato(u, g.extrato_id)
+    assert _correcoes(db, u) == [{"transacao_id": None, "categoria": "compras"}]
+    # o mesmo extrato importado de novo e corrigido: a correção antiga dá lugar à nova
+    db.grava_extrato(u, nome_arquivo="a.csv", hash_arquivo="h-corr-2", parser="p", periodo_inicio=None,
+                     periodo_fim=None, transacoes=[_t(5)])
+    [t2] = db.busca_transacoes(u)
+    assert db.muda_categoria(u, t2["id"], "mercado")
+    assert _correcoes(db, u) == [{"transacao_id": t2["id"], "categoria": "mercado"}]
+    assert db.muda_categoria(u, t2["id"], None)  # sem categoria desfaz a correção
+    assert _correcoes(db, u) == []

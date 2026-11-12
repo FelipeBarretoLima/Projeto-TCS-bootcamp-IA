@@ -3,7 +3,7 @@
 from datetime import date
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Response
+from fastapi import APIRouter, Depends, HTTPException, Path, Query, Response
 
 from database.repository import Banco
 from ml.classes import Category
@@ -18,6 +18,8 @@ router = APIRouter(tags=["transacoes"])
 
 SEM_CATEGORIA = "sem_categoria"
 MESES_PADRAO = 6
+# o id é bigint no banco: fora deste intervalo o Postgres dava erro e a rota respondia 500
+ID_MAXIMO = 2**63 - 1
 
 
 def inicio_da_janela(ultima: date, meses: int = MESES_PADRAO) -> date:
@@ -76,7 +78,7 @@ def _com_original(linha: dict) -> TransacaoSalva:
 
 @router.patch("/transacoes/{transacao_id}", status_code=204)
 def muda_categoria(
-    transacao_id: int,
+    transacao_id: Annotated[int, Path(ge=1, le=ID_MAXIMO)],
     nova: NovaCategoria,
     usuario: Annotated[Usuario, Depends(usuario_atual)],
     db: Annotated[Banco, Depends(banco)],

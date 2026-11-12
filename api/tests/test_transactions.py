@@ -114,3 +114,9 @@ def test_periodo_curto_comeca_na_primeira_transacao(com_transacoes):
     assert TestClient(app).get("/api/transacoes/periodo").json() == {
         "primeira": "2024-01-05", "ultima": "2024-02-03",
         "padrao_inicio": "2024-01-05", "padrao_fim": "2024-02-03"}
+
+
+@pytest.mark.parametrize("transacao_id", [0, -1, 2**63])
+def test_id_fora_do_intervalo_do_banco_responde_422_e_nao_500(transacao_id):
+    r = TestClient(app).patch(f"/api/transacoes/{transacao_id}", json={"categoria": "mercado"})
+    assert r.status_code == 422
