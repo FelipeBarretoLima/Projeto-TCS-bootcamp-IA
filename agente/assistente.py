@@ -14,6 +14,7 @@ from typing import Any, Literal
 
 import pandas as pd
 from langchain.agents import create_agent
+from langchain.agents.middleware import ModelFallbackMiddleware
 from langchain_core.messages import AIMessage, BaseMessage, HumanMessage
 from langchain_core.tools import BaseTool, tool
 
@@ -31,6 +32,10 @@ Regras:
   calcule valores por conta própria: use só os números que as ferramentas devolverem.
 - Escolha a ferramenta que responde a pergunta. Cada ferramenta já gera um gráfico que é mostrado
   ao usuário junto com o seu texto; não descreva o gráfico ponto a ponto, comente o que importa.
+- Pergunta sobre como os gastos se dividem entre categorias ("onde gastei mais?", "gastos por
+  categoria", "com o que eu mais gasto?", "divisão dos gastos", "quanto foi cada categoria"):
+  use gastos_por_categoria, que mostra um gráfico de pizza. Só use gastos_mensais quando a
+  pergunta for sobre a evolução mês a mês (de todas ou de uma categoria).
 - Chame no máximo uma ferramenta por pergunta, a não ser que a pergunta peça duas coisas diferentes.
 - Período: por padrão as ferramentas usam os "últimos N meses" (parâmetro `meses`), que terminam
   no mês do extrato mais recente do usuário. Para um período específico, use `de` e `ate` no
@@ -89,8 +94,10 @@ def ferramentas(df: pd.DataFrame, graficos: list[dict[str, Any]]) -> list[BaseTo
 
     @tool
     def gastos_por_categoria(meses: int = 1, de: str | None = None, ate: str | None = None) -> dict[str, Any]:
-        """Quanto foi gasto em cada categoria no período, do maior para o menor. Ex.: "onde gastei
-        mais?", "como se dividiram meus gastos em 2023?". `de`/`ate` (AAAA-MM) no lugar de `meses`."""
+        """Quanto foi gasto em cada categoria no período, do maior para o menor, com o percentual
+        de cada uma (gráfico de pizza). Use para qualquer pergunta sobre divisão dos gastos entre
+        categorias. Ex.: "onde gastei mais?", "gastos por categoria", "como se dividiram meus gastos
+        em 2023?". `de`/`ate` (AAAA-MM) no lugar de `meses`."""
         return roda(lambda: consultas.gastos_por_categoria(df, meses, de, ate))
 
     @tool
@@ -162,24 +169,50 @@ def _limpa(texto: str) -> str:
     return _NOTA_DE_GRAFICO.sub("\n", texto).strip()
 
 
+@dataclass(frozen=True)
+class Modelos:
+    """O modelo principal e os reservas, tentados em ordem se o principal falhar (503, demora...)."""
+
+    principal: Any
+    reservas: tuple[Any, ...] = ()
+
+
 def responde(modelo, df: pd.DataFrame, pergunta: str, historico: Sequence[dict[str, Any]] = ()) -> Resposta:
-    """Uma rodada do assistente. `modelo` é um chat model do LangChain (Gemini na API)."""
+    """Uma rodada do assistente. `modelo`: um chat model do LangChain ou `Modelos` (principal + reservas)."""
     graficos: list[dict[str, Any]] = []
-    agente = create_agent(model=modelo, tools=ferramentas(df, graficos),
-                          system_prompt=INSTRUCOES + contexto_dos_dados(df))
+    principal, reservas = (modelo.principal, modelo.reservas) if isinstance(modelo, Modelos) else (modelo, ())
+    agente = create_agent(model=principal, tools=ferramentas(df, graficos),
+                          system_prompt=INSTRUCOES + contexto_dos_dados(df),
+                          middleware=[ModelFallbackMiddleware(*reservas)] if reservas else ())
     saida = agente.invoke({"messages": [*historico_para_mensagens(historico), HumanMessage(pergunta)]},
                           config={"recursion_limit": 8})
     final = saida["messages"][-1]
     texto = _limpa(final.text if hasattr(final, "text") else str(final.content))
     return Resposta(texto or "Não consegui responder agora. Tente reformular a pergunta.",
-                    graficos[-1] if graficos else None)
+                    escolhe_grafico(graficos))
 
 
-def modelo_gemini(chave: str, nome: str):
+def escolhe_grafico(graficos: list[dict[str, Any]]) -> dict[str, Any] | None:
+    """Um gráfico por resposta: a pizza (divisão por categoria), se o agente gerou uma; senão, o último."""
+    pizzas = [g for g in graficos if g.get("tipo") == "pizza"]
+    return pizzas[-1] if pizzas else (graficos[-1] if graficos else None)
+
+
+def modelo_gemini(chave: str, nome: str, timeout: float = 15):
     from langchain_google_genai import ChatGoogleGenerativeAI
 
-    # thinking_level="minimal": o "raciocínio" do Gemini fazia algumas respostas levarem ~30 s; aqui ele
+    # thinking "mínimo": o "raciocínio" do Gemini fazia algumas respostas levarem ~30 s; aqui ele
     # só escolhe uma ferramenta e resume números prontos, o que não precisa de raciocínio longo
-    # (medido: de 2-33 s para ~1,6 s por pergunta, com as mesmas respostas)
-    return ChatGoogleGenerativeAI(model=nome, api_key=chave, temperature=0, max_retries=2, timeout=60,
-                                  thinking_level="minimal")
+    # (medido: de 2-33 s para ~1,6 s por pergunta, com as mesmas respostas). Os modelos 2.x usam
+    # thinking_budget em vez de thinking_level.
+    raciocinio = {"thinking_budget": 0} if nome.startswith("gemini-2") else {"thinking_level": "minimal"}
+    # max_retries=0: modelo sobrecarregado (503) não melhora repetindo; quem tenta de novo é o
+    # próximo modelo da lista (ModelFallbackMiddleware), sem o usuário esperar minutos
+    return ChatGoogleGenerativeAI(model=nome, api_key=chave, temperature=0, max_retries=0, timeout=timeout,
+                                  **raciocinio)
+
+
+def modelos_gemini(chave: str, principal: str, reservas: Sequence[str] = (), timeout: float = 15) -> Modelos:
+    """O principal e os reservas (sem repetir o principal), todos com o mesmo tempo máximo."""
+    nomes = [n for n in dict.fromkeys(reservas) if n != principal]
+    return Modelos(modelo_gemini(chave, principal, timeout), tuple(modelo_gemini(chave, n, timeout) for n in nomes))

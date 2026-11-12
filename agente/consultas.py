@@ -223,7 +223,8 @@ def gastos_por_categoria(df: pd.DataFrame, meses: int = 1, de: str | None = None
               "percentual": _r(100 * v / total) if total else 0.0} for c, v in por_cat.items()]
     return Resultado(
         {"periodo": _periodo(janela), "total_gasto": _r(total), "categorias": itens, **_cobertura(df, janela)},
-        {"tipo": "barras_horizontais", "titulo": f"Gastos por categoria ({_periodo(janela)})",
+        # pizza: mostra a divisão do total entre as categorias (o tooltip mostra o %)
+        {"tipo": "pizza", "titulo": f"Gastos por categoria ({_periodo(janela)})",
          "rotulos": [i["nome"] for i in itens], "series": [{"nome": "Gasto", "valores": [i["total"] for i in itens]}],
          "formato": "moeda"})
 

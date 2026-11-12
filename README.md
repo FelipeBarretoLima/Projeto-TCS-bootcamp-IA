@@ -45,7 +45,9 @@ O assistente nunca faz contas nem vê a lista de transações: o Gemini escolhe 
 | `DATABASE_URL` | Supabase > **Connect** > **Session pooler** > URI (senha no lugar de `[YOUR-PASSWORD]`, sem colchetes) |
 | `SUPABASE_PUBLISHABLE_KEY` | Supabase > **Project Settings** > **API Keys** > Publishable key (`sb_publishable_...`) |
 | `GEMINI_API_KEY` | aistudio.google.com > **Get API key** |
-| `GEMINI_MODEL` | opcional; padrão `gemini-3.1-flash-lite` |
+| `GEMINI_MODEL` | opcional; padrão `gemini-3.5-flash-lite` (o mais rápido e estável nos testes) |
+| `GEMINI_MODELOS_RESERVA` | opcional; padrão `gemini-3.6-flash,gemini-3.1-flash-lite`. Se o principal falhar (ex.: 503 "high demand") ou demorar, a pergunta vai para estes, em ordem |
+| `GEMINI_TIMEOUT` | opcional; padrão `10` (segundos por modelo antes de passar para o próximo; uma chamada normal leva 1-3 s) |
 | `CHAVE_ORIGINAIS` | cifra o texto original das transações (sem anonimizar), que só o dono vê. Gere com `python -m api.cifra --nova-chave` **uma vez** e passe a **mesma** chave para toda a equipe (por um canal privado, nunca no git). Sem ela, a tela mostra o texto anonimizado. Perder a chave = os originais já gravados não abrem mais. |
 | `CORS_ORIGENS` | opcional; só se a página for publicada num domínio diferente do da API (vários: separe por vírgula) |
 
