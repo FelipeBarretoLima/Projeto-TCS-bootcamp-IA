@@ -14,10 +14,10 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
-from banco.conexao import fecha
+from database.connection import fecha
 
 from . import config
-from .rotas import assistente, conta, extratos, saude, transacoes
+from .routes import assistant, account, statements, health, transactions
 
 
 @asynccontextmanager
@@ -33,11 +33,11 @@ if config.CORS_ORIGENS:
                        allow_headers=["Authorization", "Content-Type"])
 
 # todas as rotas sob /api: o proxy do Vite repassa esse prefixo para cá
-app.include_router(saude.router, prefix="/api")
-app.include_router(extratos.router, prefix="/api")
-app.include_router(transacoes.router, prefix="/api")
-app.include_router(assistente.router, prefix="/api")
-app.include_router(conta.router, prefix="/api")
+app.include_router(health.router, prefix="/api")
+app.include_router(statements.router, prefix="/api")
+app.include_router(transactions.router, prefix="/api")
+app.include_router(assistant.router, prefix="/api")
+app.include_router(account.router, prefix="/api")
 
 # página já compilada (npm run build): servida pela própria API
 if (config.DIR_FRONTEND / "index.html").is_file():

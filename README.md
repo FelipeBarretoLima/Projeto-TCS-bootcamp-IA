@@ -6,22 +6,22 @@ padronizado e anônimo e classifica cada transação numa categoria de gasto.
 ## Estrutura
 
 ```
-extracao/      módulo de extração (parser): extratos -> CSV padronizado e anônimo
+extraction/      módulo de extração (parser): extratos -> CSV padronizado e anônimo
 ml/            módulo de ML: CSV do parser -> categoria de cada transação
 api/           API HTTP (FastAPI): importação, dashboard, chat e login
-banco/         banco de dados (PostgreSQL no Supabase): tabelas e acesso
-agente/        Assistente TAS: consultas fixas (pandas) + Gemini (LangChain)
+database/         banco de dados (PostgreSQL no Supabase): tabelas e acesso
+agent/        Assistente TAS: consultas fixas (pandas) + Gemini (LangChain)
 frontend/      página web (React + TypeScript + Vite)
 data/          extratos reais e saídas (fora do git)
 ```
 
-Cada módulo tem o seu README: [extracao/README.md](extracao/README.md), [ml/README.md](ml/README.md)
+Cada módulo tem o seu README: [extraction/README.md](extraction/README.md), [ml/README.md](ml/README.md)
 e [frontend/README.md](frontend/README.md).
 
 Fluxo pela linha de comando:
 
 ```
-data/raw/  --(python -m extrato tudo)-->  data/saida/transacoes.csv  --(ml)-->  CSV + categoria
+data/raw/  --(python -m statement tudo)-->  data/saida/transacoes.csv  --(ml)-->  CSV + categoria
 ```
 
 Fluxo pela página:
@@ -33,10 +33,10 @@ dashboard / chat --> api: consultas fixas sobre as transações do usuário --> 
 
 O arquivo enviado pela página é processado numa pasta temporária e apagado em seguida: só as
 transações extraídas (já anonimizadas) ficam salvas, na conta de quem enviou. Uma compra que
-aparece em dois extratos com períodos sobrepostos entra uma vez só (`banco/deduplicacao.py`).
+aparece em dois extratos com períodos sobrepostos entra uma vez só (`database/deduplication.py`).
 
 O assistente nunca faz contas nem vê a lista de transações: o Gemini escolhe uma das consultas de
-`agente/consultas.py`, que calcula com pandas e devolve só os totais e os dados do gráfico.
+`agent/queries.py`, que calcula com pandas e devolve só os totais e os dados do gráfico.
 
 ## Arquivo `.env` (raiz, fora do git)
 
@@ -48,7 +48,7 @@ O assistente nunca faz contas nem vê a lista de transações: o Gemini escolhe 
 | `GEMINI_MODEL` | opcional; padrão `gemini-3.5-flash-lite` (o mais rápido e estável nos testes) |
 | `GEMINI_MODELOS_RESERVA` | opcional; padrão `gemini-3.6-flash,gemini-3.1-flash-lite`. Se o principal falhar (ex.: 503 "high demand") ou demorar, a pergunta vai para estes, em ordem |
 | `GEMINI_TIMEOUT` | opcional; padrão `10` (segundos por modelo antes de passar para o próximo; uma chamada normal leva 1-3 s) |
-| `CHAVE_ORIGINAIS` | cifra o texto original das transações (sem anonimizar), que só o dono vê. Gere com `python -m api.cifra --nova-chave` **uma vez** e passe a **mesma** chave para toda a equipe (por um canal privado, nunca no git). Sem ela, a tela mostra o texto anonimizado. Perder a chave = os originais já gravados não abrem mais. |
+| `CHAVE_ORIGINAIS` | cifra o texto original das transações (sem anonimizar), que só o dono vê. Gere com `python -m api.cipher --nova-chave` **uma vez** e passe a **mesma** chave para toda a equipe (por um canal privado, nunca no git). Sem ela, a tela mostra o texto anonimizado. Perder a chave = os originais já gravados não abrem mais. |
 | `CORS_ORIGENS` | opcional; só se a página for publicada num domínio diferente do da API (vários: separe por vírgula) |
 
 `SUPABASE_URL` é deduzido do `DATABASE_URL`. Nunca faça commit do `.env` nem cole o conteúdo dele
@@ -108,13 +108,13 @@ dashboard. O frontend precisa de **Node.js 22** (ou 20.19+). Antes da primeira v
 
 A API lê (sem gravar) os mapas de `data/privado/` só para anonimizar. A categoria vem de duas
 formas: toda **entrada** (dinheiro recebido) é `receitas`, por regra; toda **saída** é classificada
-pelo modelo `ml/modelos/svm_tfidf.pkl` (gerado por `python -m ml.treinar`). Sem o `.pkl`, as saídas
+pelo modelo `ml/modelos/svm_tfidf.pkl` (gerado por `python -m ml.train`). Sem o `.pkl`, as saídas
 ficam sem categoria. As regras fixas e o mapa de estabelecimentos só geram os rótulos do treino
-(`python -m ml.rotular`); o modelo aprendeu o que eles faziam.
+(`python -m ml.label`); o modelo aprendeu o que eles faziam.
 
 Na aba Extrato, o usuário pode corrigir a categoria de uma transação (vale para o dashboard e o
 assistente; fica gravada com origem `usuario`). Para evitar abuso, cada usuário pode fazer até 10
-perguntas por minuto ao assistente e importar até 20 extratos a cada 10 minutos (`api/limite.py`).
+perguntas por minuto ao assistente e importar até 20 extratos a cada 10 minutos (`api/rate_limit.py`).
 
 ### Publicar (um único servidor)
 
@@ -131,12 +131,12 @@ versão nova, rode o `npm run build` de novo; para voltar a desenvolver só com 
 ## Banco de dados (Supabase)
 
 PostgreSQL no Supabase. Login e senha ficam no Supabase Auth; as tabelas do projeto (`usuarios`,
-`extratos`, `transacoes`, `conversas`, `mensagens`) estão em `banco/migracoes/`.
+`extratos`, `transacoes`, `conversas`, `mensagens`) estão em `database/migrations/`.
 
 1. Crie um arquivo `.env` na raiz (fora do git) com `DATABASE_URL=` + a connection string do
    Supabase (botão **Connect** > **Session pooler** > URI, com a senha no lugar de `[YOUR-PASSWORD]`,
    sem os colchetes).
-2. Rode `python -m banco.migrar` para criar ou atualizar as tabelas (`--status` só mostra o que falta).
+2. Rode `python -m database.migrate` para criar ou atualizar as tabelas (`--status` só mostra o que falta).
 
 Para mudar o banco, crie uma migração nova (`0002_...sql`); nunca edite uma já aplicada.
 
@@ -146,7 +146,7 @@ Para mudar o banco, crie uma migração nova (`0002_...sql`); nunca edite uma j�
 pytest
 ```
 
-Roda os testes de `extracao/tests`, `ml/tests`, `api/tests`, `banco/tests` e `agente/tests`, sem
+Roda os testes de `extraction/tests`, `ml/tests`, `api/tests`, `database/tests` e `agent/tests`, sem
 internet: o banco, o login e o Gemini são trocados por versões falsas. Para testar também contra o
 banco de verdade (numa transação desfeita no fim, nada fica gravado): `TESTE_BANCO=1 pytest`.
 As fixtures de teste são sempre inventadas: nunca copie conteúdo de extrato real para os testes.

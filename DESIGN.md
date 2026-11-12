@@ -132,7 +132,7 @@ components:
 
 O TAS é uma ferramenta de trabalho limpa: fundo azulado quase branco, superfícies brancas com borda fina, tinta azul-marinho e um único azul de ação. Toda a identidade da marca mora num só fio, o degradê amarelo → laranja → vermelho → magenta → roxo, que aparece em poucos lugares e sempre como marca, nunca como decoração de conteúdo: a faixa de 3px no topo do cabeçalho, o logotipo "tas" e o círculo do envio na zona de upload (e o contorno dela enquanto um arquivo é arrastado).
 
-A densidade é de leitura confortável, não de painel apertado: blocos espaçados por 1.75rem, tabela com células generosas, números em algarismos tabulares. O sistema recusa o painel genérico cinza com um acento solto; a cor de conteúdo é semântica (verde para entrada, vermelho para saída e rejeição, azul-claro para os selos de categoria) e o degradê fica reservado à marca. A direção visual veio dos mockups do próprio usuário em `referencias/`, de onde a paleta foi amostrada.
+A densidade é de leitura confortável, não de painel apertado: blocos espaçados por 1.75rem, tabela com células generosas, números em algarismos tabulares. O sistema recusa o painel genérico cinza com um acento solto; a cor de conteúdo é semântica (verde para entrada, vermelho para saída e rejeição, azul-claro para os selos de categoria) e o degradê fica reservado à marca. A direção visual veio dos mockups do próprio usuário em `references/`, de onde a paleta foi amostrada.
 
 Há dois temas, claro (padrão) e escuro (`[data-tema='escuro']` na raiz), escolhidos pela preferência do sistema e lembrados em `localStorage`. O escuro é derivado: os mesmos papéis, com valores próprios.
 

@@ -1,1 +1,1 @@
-"""Módulo de ML: rotulagem do treino e (em seguida) classificação do CSV do parser."""
+"""ML module: training labeling and classification of the parser's CSV."""

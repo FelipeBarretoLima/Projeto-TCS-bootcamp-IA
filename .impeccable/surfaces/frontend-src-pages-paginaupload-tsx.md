@@ -22,7 +22,7 @@ STORY: O visitante vê de cara onde soltar o extrato, entende em segundos se foi
 
 FIRST VIEWPORT: Faixa de 3px com o degradê no topo; cabeçalho branco com o logotipo tas em degradê e o nome em três linhas à esquerda, a pílula "Importar extrato" e o tema à direita. Título "Importar extrato" 38px/800 e subtítulo; zona tracejada de largura total com o círculo em degradê e o ícone de upload como ação principal.
 
-FORM: Direção fixada pelos mockups do usuário em referencias/ (login, importação, tabela), código primeiro. Movimento assinatura: o degradê da marca (faixa, logotipo, círculo de upload que sobe no hover/arrasto).
-seed: none (pinned: direction fixed by the user's own mockups in referencias/; new-work.md: "a user- or brief-pinned direction beats the roll, always", so no concept-seed roll ran)
+FORM: Direção fixada pelos mockups do usuário em references/ (login, importação, tabela), código primeiro. Movimento assinatura: o degradê da marca (faixa, logotipo, círculo de upload que sobe no hover/arrasto).
+seed: none (pinned: direction fixed by the user's own mockups in references/; new-work.md: "a user- or brief-pinned direction beats the roll, always", so no concept-seed roll ran)
 
 FINISH: unreviewed and undocumented is unfinished; this build ends with the finish review, the verdict, DESIGN.md, and every shipping raster carrying its provenance

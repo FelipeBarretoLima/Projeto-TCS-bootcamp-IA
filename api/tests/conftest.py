@@ -3,11 +3,11 @@
 import pytest
 
 from api import config
-from api.autenticacao import usuario_atual
-from api.dependencias import banco
-from api.limite import LIMITE_CHAT, LIMITE_IMPORTACAO
+from api.auth import usuario_atual
+from api.dependencies import banco
+from api.rate_limit import LIMITE_CHAT, LIMITE_IMPORTACAO
 from api.main import app
-from api.tests.falsos import USUARIO, BancoFalso
+from api.tests.fakes import USUARIO, BancoFalso
 
 
 @pytest.fixture(autouse=True)
@@ -51,10 +51,10 @@ def retreino_no_banco_falso(db, monkeypatch):
     """Retreino com o banco falso e na hora (sem thread), para o teste ver o resultado."""
     from contextlib import nullcontext
 
-    from api.servicos import retreino
+    from api.services import retraining
 
-    monkeypatch.setattr(retreino, "abre_banco", lambda: nullcontext(db))
-    monkeypatch.setattr(retreino, "inicia_em_segundo_plano", lambda alvo: alvo())
+    monkeypatch.setattr(retraining, "abre_banco", lambda: nullcontext(db))
+    monkeypatch.setattr(retraining, "inicia_em_segundo_plano", lambda alvo: alvo())
 
 
 @pytest.fixture

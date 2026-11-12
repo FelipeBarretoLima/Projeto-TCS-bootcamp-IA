@@ -3,19 +3,19 @@ requires = ["setuptools==84.2.1"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "extrato"
+name = "statement"
 version = "0.1.0"
 description = "Extração, anonimização e normalização de extratos bancários"
 requires-python = ">=3.12,<3.13"
 
-# módulo de extração: código em extracao/src/extrato (instalado em modo editável pelo requirements.txt)
+# módulo de extração: código em extraction/src/statement (instalado em modo editável pelo requirements.txt)
 [tool.setuptools.packages.find]
-where = ["extracao/src"]
+where = ["extraction/src"]
 
 [tool.setuptools.package-data]
-extrato = ["dados/*.txt"]
+statement = ["dados/*.txt"]
 
-# testes dos módulos; "." deixa os pacotes ml, api, banco e agente importáveis
+# testes dos módulos; "." deixa os pacotes ml, api, database e agent importáveis
 [tool.pytest.ini_options]
-testpaths = ["extracao/tests", "ml/tests", "api/tests", "banco/tests", "agente/tests"]
-pythonpath = ["extracao/src", "."]
+testpaths = ["extraction/tests", "ml/tests", "api/tests", "database/tests", "agent/tests"]
+pythonpath = ["extraction/src", "."]

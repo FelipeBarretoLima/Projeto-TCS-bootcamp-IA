@@ -1,55 +1,55 @@
-"""Classes do target e regras determinísticas (usadas na rotulagem e, depois, antes do modelo).
+"""Target classes and deterministic rules (used in labeling and, later, before the model).
 
-Classes (definidas com o usuário em 2026-11-04):
+Classes (defined with the user on 2026-11-04):
     mercado, alimentacao_fora, transporte, compras, contas_servicos,
-    transferencia_pessoa  (PIX/TED para pessoa física e pagamento a pessoa física na maquininha),
+    transferencia_pessoa  (PIX/TED to an individual and payment to an individual on a card machine),
     receitas, financeiro
 
-Regras (não dependem do nome do estabelecimento): investimento/rendimento/tarifa/juros/saque/estorno/
-fatura/transferência própria -> financeiro; salário e entradas -> receitas; boleto pago ->
-contas_servicos; PIX/TED ou cartão para PESSOA_FISICA -> transferencia_pessoa.
-O que sobra (compra em estabelecimento, PIX para empresa) depende do nome: mapa (rotulagem) ou modelo.
+Rules (do not depend on the merchant name): investment/yield/fee/interest/withdrawal/refund/
+invoice/own transfer -> financeiro; salary and income -> receitas; paid bank slip ->
+contas_servicos; PIX/TED or card to PESSOA_FISICA -> transferencia_pessoa.
+What is left (merchant purchase, PIX to a company) depends on the name: map (labeling) or model.
 """
 
 from __future__ import annotations
 
 from enum import StrEnum
 
-from extrato.modelos import PESSOA_FISICA, Meio, Tipo
+from statement.models import INDIVIDUAL_PERSON, PaymentMethod, TransactionType
 
 
-class Categoria(StrEnum):
-    MERCADO = "mercado"
-    ALIMENTACAO_FORA = "alimentacao_fora"
-    TRANSPORTE = "transporte"
-    COMPRAS = "compras"
-    CONTAS_SERVICOS = "contas_servicos"
-    TRANSFERENCIA_PESSOA = "transferencia_pessoa"
-    RECEITAS = "receitas"
-    FINANCEIRO = "financeiro"
+class Category(StrEnum):
+    GROCERIES = "mercado"
+    EATING_OUT = "alimentacao_fora"
+    TRANSPORT = "transporte"
+    SHOPPING = "compras"
+    BILLS_SERVICES = "contas_servicos"
+    PERSON_TRANSFER = "transferencia_pessoa"
+    INCOME = "receitas"
+    FINANCIAL = "financeiro"
 
 
-_FINANCEIRO = {Meio.INVESTIMENTO, Meio.RENDIMENTO, Meio.TARIFA, Meio.JUROS_IOF, Meio.SAQUE, Meio.ESTORNO,
-               Meio.PAGAMENTO_FATURA, Meio.TRANSFERENCIA_INTERNA}
+_FINANCIAL = {PaymentMethod.INVESTMENT, PaymentMethod.YIELD, PaymentMethod.FEE, PaymentMethod.INTEREST_IOF, PaymentMethod.WITHDRAWAL, PaymentMethod.REFUND,
+               PaymentMethod.INVOICE_PAYMENT, PaymentMethod.INTERNAL_TRANSFER}
 
 
-def por_regra(meio: Meio, tipo: Tipo, historico: str, contraparte: str) -> Categoria | None:
-    """Categoria que não depende do nome do estabelecimento (None = depende do nome)."""
-    if meio in _FINANCEIRO:
-        return Categoria.FINANCEIRO
-    if meio is Meio.SALARIO:
-        return Categoria.RECEITAS
-    if meio is Meio.OUTROS:
-        if tipo is Tipo.ENTRADA:
-            return Categoria.RECEITAS
-        return Categoria.CONTAS_SERVICOS if "RECARGA" in historico else Categoria.FINANCEIRO
-    if tipo is Tipo.ENTRADA:
-        # crédito do cartão colocado na conta (Nubank) é movimento financeiro, não receita
-        return Categoria.FINANCEIRO if meio is Meio.CARTAO_CREDITO else Categoria.RECEITAS
-    if meio is Meio.BOLETO:
-        return Categoria.CONTAS_SERVICOS
-    if contraparte == PESSOA_FISICA:
-        return Categoria.TRANSFERENCIA_PESSOA
-    if meio in (Meio.PIX, Meio.TED_DOC) and not contraparte:
-        return Categoria.TRANSFERENCIA_PESSOA
+def by_rule(meio: PaymentMethod, tipo: TransactionType, historico: str, contraparte: str) -> Category | None:
+    """Category that does not depend on the merchant name (None = depends on the name)."""
+    if meio in _FINANCIAL:
+        return Category.FINANCIAL
+    if meio is PaymentMethod.SALARY:
+        return Category.INCOME
+    if meio is PaymentMethod.OTHER:
+        if tipo is TransactionType.INCOME:
+            return Category.INCOME
+        return Category.BILLS_SERVICES if "RECARGA" in historico else Category.FINANCIAL
+    if tipo is TransactionType.INCOME:
+        # card credit moved to the account (Nubank) is a financial movement, not income
+        return Category.FINANCIAL if meio is PaymentMethod.CREDIT_CARD else Category.INCOME
+    if meio is PaymentMethod.BANK_SLIP:
+        return Category.BILLS_SERVICES
+    if contraparte == INDIVIDUAL_PERSON:
+        return Category.PERSON_TRANSFER
+    if meio in (PaymentMethod.PIX, PaymentMethod.TED_DOC) and not contraparte:
+        return Category.PERSON_TRANSFER
     return None
