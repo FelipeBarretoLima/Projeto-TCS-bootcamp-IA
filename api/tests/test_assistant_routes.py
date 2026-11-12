@@ -114,3 +114,38 @@ def test_conversa_apagada_durante_a_resposta_da_404_sem_gravar(db, chamadas, mon
     monkeypatch.setattr(rota, "responde", apaga_no_meio)
     r = cliente.post("/api/chat", json={"mensagem": "e agora?", "conversa_id": cid})
     assert r.status_code == 404 and "apagada" in r.json()["detail"]
+
+
+def test_nenhuma_conexao_fica_aberta_enquanto_o_llm_responde(db, monkeypatch):
+    """Com a conexão presa durante o LLM (2 a 30 s), 5 perguntas lentas esgotavam o pool."""
+    from contextlib import contextmanager
+
+    from api.dependencies import abre_banco, banco
+
+    abertas = []
+
+    @contextmanager
+    def conta_conexoes():
+        abertas.append(1)
+        try:
+            yield db
+        finally:
+            abertas.pop()
+
+    def conexao_da_requisicao_inteira():  # a dependência antiga, que prendia a conexão até o fim
+        with conta_conexoes() as d:
+            yield d
+
+    app.dependency_overrides[banco] = conexao_da_requisicao_inteira
+
+    def responde_conferindo(modelo, df, pergunta, historico=()):
+        assert abertas == [], "havia uma conexão do banco aberta durante a chamada ao LLM"
+        return Resposta("ok", None)
+
+    app.dependency_overrides[abre_banco] = lambda: conta_conexoes
+    app.dependency_overrides[modelo_do_assistente] = lambda: object()
+    monkeypatch.setattr(rota, "responde", responde_conferindo)
+    cliente = TestClient(app)
+    cid = cliente.post("/api/chat", json={"mensagem": "oi"}).json()["conversa_id"]
+    r = cliente.post("/api/chat", json={"mensagem": "e agora?", "conversa_id": cid})
+    assert r.status_code == 200 and len(db.mensagens_) == 4

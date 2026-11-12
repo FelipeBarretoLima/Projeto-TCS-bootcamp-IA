@@ -12,7 +12,7 @@ from agent.assistant import responde
 from database.repository import Banco, ConversaApagada
 
 from ..auth import Usuario, usuario_atual
-from ..dependencies import banco, modelo_do_assistente
+from ..dependencies import AbreBanco, abre_banco, banco, modelo_do_assistente
 from ..schemas import Conversa, Mensagem, NovoTitulo, Painel, Pergunta, RespostaChat
 from ..rate_limit import limita_chat
 
@@ -78,35 +78,44 @@ def apaga_conversa(
 def chat(
     pergunta: Pergunta,
     usuario: Annotated[Usuario, Depends(usuario_atual)],
-    db: Annotated[Banco, Depends(banco)],
+    abre: Annotated[AbreBanco, Depends(abre_banco)],
     modelo=Depends(modelo_do_assistente),
 ) -> RespostaChat:
+    """Três fases, para não prender uma conexão do pool enquanto o LLM responde (de 2 a 30 s ou
+    mais): com a conexão presa, 5 perguntas lentas esgotavam o pool e todas as outras rotas
+    falhavam."""
     texto = pergunta.mensagem.strip()
     if not texto:
         raise HTTPException(400, "mensagem vazia")
-    db.garante_usuario(usuario.id, usuario.email, usuario.nome)
 
-    if pergunta.conversa_id is None:
+    # 1) lê o que o assistente precisa e devolve a conexão ao pool
+    with abre() as db:
         historico = []
-        titulo = texto if len(texto) <= TAMANHO_TITULO else texto[: TAMANHO_TITULO - 1].rstrip() + "…"
-        conversa_id = db.cria_conversa(usuario.id, titulo)
-    else:
-        conversa_id = pergunta.conversa_id
-        if not db.conversa_e_do_usuario(usuario.id, conversa_id):
-            raise HTTPException(404, "conversa não encontrada")
-        historico = db.mensagens(conversa_id)
+        if pergunta.conversa_id is not None:
+            if not db.conversa_e_do_usuario(usuario.id, pergunta.conversa_id):
+                raise HTTPException(404, "conversa não encontrada")
+            historico = db.mensagens(pergunta.conversa_id)
+        df = queries.tabela(db.transacoes(usuario.id))
 
-    df = queries.tabela(db.transacoes(usuario.id))
+    # 2) o LLM, sem nenhuma conexão aberta
     try:
         resposta = responde(modelo, df, texto, historico)
     except Exception:
-        # nada é gravado (a transação da requisição é desfeita): o usuário pode tentar de novo
+        # nada foi gravado ainda: o usuário pode tentar de novo
         log.exception("falha no assistente")
         raise HTTPException(502, "o assistente não conseguiu responder agora; tente de novo em instantes") from None
 
-    try:
-        m_pergunta = db.grava_mensagem(conversa_id, "usuario", texto)
-        m_resposta = db.grava_mensagem(conversa_id, "agente", resposta.texto, resposta.grafico)
-    except ConversaApagada:
-        raise HTTPException(404, "a conversa foi apagada enquanto o assistente respondia") from None
+    # 3) grava; a conversa nova só nasce se houve resposta
+    with abre() as db:
+        db.garante_usuario(usuario.id, usuario.email, usuario.nome)
+        if pergunta.conversa_id is None:
+            titulo = texto if len(texto) <= TAMANHO_TITULO else texto[: TAMANHO_TITULO - 1].rstrip() + "…"
+            conversa_id = db.cria_conversa(usuario.id, titulo)
+        else:
+            conversa_id = pergunta.conversa_id
+        try:
+            m_pergunta = db.grava_mensagem(conversa_id, "usuario", texto)
+            m_resposta = db.grava_mensagem(conversa_id, "agente", resposta.texto, resposta.grafico)
+        except ConversaApagada:
+            raise HTTPException(404, "a conversa foi apagada enquanto o assistente respondia") from None
     return RespostaChat(conversa_id=conversa_id, pergunta=Mensagem(**m_pergunta), resposta=Mensagem(**m_resposta))
