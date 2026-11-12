@@ -23,6 +23,10 @@ COLUNAS_TRANSACAO = ("data", "historico", "contraparte", "valor", "tipo", "meio"
                      "categoria", "origem_categoria")
 # texto original cifrado pela API (api/cipher.py); opcional em cada transação
 COLUNA_ORIGINAL = "original_cifrado"
+# campos anonimizados copiados da transação para public.correcoes (contrato do parser, sem id_usuario)
+_CAMPOS_DA_CORRECAO = ("data", "historico", "contraparte", "valor", "tipo", "meio", "banco")
+# chave fixa da trava (pg_advisory_xact_lock) que impede dois retreinos ao mesmo tempo
+_TRAVA_RETREINO = 7_242_001
 
 
 class ExtratoRepetido(Exception):
@@ -80,6 +84,10 @@ class Banco:
                       periodo_inicio: date | None, periodo_fim: date | None,
                       transacoes: list[dict[str, Any]]) -> Gravacao:
         """Grava o extrato e só as transações que ainda não estão no banco (ver deduplicacao.py)."""
+        # Importações do mesmo usuário em fila até o commit: sem isto, dois extratos sobrepostos
+        # enviados ao mesmo tempo liam o banco antes de o outro gravar e as repetidas entravam duas
+        # vezes. A trava sai sozinha no fim da transação; usuários diferentes não esperam um pelo outro.
+        self.con.execute("select pg_advisory_xact_lock(hashtextextended(%s::text, 0))", (str(usuario_id),))
         if self._uma("select 1 from public.extratos where usuario_id = %s and hash_arquivo = %s",
                      usuario_id, hash_arquivo):
             raise ExtratoRepetido
@@ -189,32 +197,62 @@ class Banco:
             f"from public.transacoes where {' and '.join(condicoes)} order by data desc, id desc", *args)
 
     def muda_categoria(self, usuario_id: UUID, transacao_id: int, categoria: str | None) -> bool:
-        """Correção feita pelo usuário (origem "usuario"); None = sem categoria. False se não for dele."""
-        cur = self.con.execute(
+        """Correção feita pelo usuário (origem "usuario"); None = sem categoria. False se não for dele.
+
+        A correção também vai para public.correcoes (só campos anonimizados), onde sobrevive à
+        exclusão do extrato. Voltar para "sem categoria" desfaz a correção nas duas tabelas.
+        """
+        linha = self._uma(
             "update public.transacoes set categoria = %s, "
             "origem_categoria = case when %s::text is null then null else 'usuario' end, "
             "corrigida_em = case when %s::text is null then null else now() end "
-            "where id = %s and usuario_id = %s",
-            (categoria, categoria, categoria, transacao_id, usuario_id))
-        return cur.rowcount > 0
+            "where id = %s and usuario_id = %s "
+            "returning data, historico, contraparte, valor, tipo, meio, banco",
+            categoria, categoria, categoria, transacao_id, usuario_id)
+        if linha is None:
+            return False
+        if categoria is None:
+            self.con.execute("delete from public.correcoes where transacao_id = %s", (transacao_id,))
+            return True
+        campos = tuple(linha[c] for c in _CAMPOS_DA_CORRECAO)
+        # a mesma transação corrigida antes num extrato já excluído e importada de novo: a correção
+        # antiga (sem transação) dá lugar a esta, para não contar duas vezes no treino
+        self.con.execute(
+            "delete from public.correcoes where usuario_id = %s and transacao_id is null and "
+            f"({', '.join(_CAMPOS_DA_CORRECAO)}) = ({', '.join(['%s'] * len(_CAMPOS_DA_CORRECAO))})",
+            (usuario_id, *campos))
+        self.con.execute(
+            f"insert into public.correcoes (usuario_id, transacao_id, {', '.join(_CAMPOS_DA_CORRECAO)}, categoria) "
+            f"values (%s, %s, {', '.join(['%s'] * len(_CAMPOS_DA_CORRECAO))}, %s) "
+            "on conflict (transacao_id) do update set categoria = excluded.categoria, corrigida_em = now()",
+            (usuario_id, transacao_id, *campos, categoria))
+        return True
 
     # --- retreino do classificador (api/services/retraining.py) ---
     # Exceção à regra "toda função filtra pelo usuário": o modelo é um só, treinado com as correções
     # de todos. Só campos anonimizados saem daqui (nunca original_cifrado).
 
     def correcoes_para_treino(self) -> list[dict[str, Any]]:
-        """Todas as correções dos usuários, como exemplos de treino (contrato do parser + categoria)."""
+        """Todas as correções dos usuários, como exemplos de treino (contrato do parser + categoria).
+
+        Vêm de public.correcoes: incluem as de extratos já excluídos.
+        """
         return self._todas(
             "select data, historico, contraparte, valor, tipo, meio, banco, categoria, corrigida_em "
-            "from public.transacoes where origem_categoria = 'usuario' and categoria is not null "
-            "order by corrigida_em, id")
+            "from public.correcoes order by corrigida_em, id")
 
     def correcoes_desde_ultimo_treino(self) -> int:
-        """Correções feitas depois do início do último retreino que deu certo (todas, se nunca houve)."""
+        """Correções feitas depois do início da última tentativa de retreino concluída, com sucesso
+        ou erro (todas, se nunca houve).
+
+        Contar só desde o último "ok" fazia cada correção seguinte a um erro (ex.: CSV base ausente)
+        disparar outro retreino. Agora, depois de um erro, são precisas mais 15 correções; o retreino
+        seguinte usa todas as correções, inclusive as anteriores ao erro.
+        """
         return self._uma(
-            "select count(*) as n from public.transacoes where origem_categoria = 'usuario' "
-            "and corrigida_em > coalesce((select max(iniciado_em) from public.treinos_modelo "
-            "where status = 'ok'), '-infinity')")["n"]
+            "select count(*) as n from public.correcoes "
+            "where corrigida_em > coalesce((select max(iniciado_em) from public.treinos_modelo "
+            "where status <> 'rodando'), '-infinity')")["n"]
 
     def treino_rodando(self) -> bool:
         """Há retreino em andamento? (um "rodando" de mais de 30 min é considerado travado)"""
@@ -224,6 +262,17 @@ class Banco:
 
     def inicia_treino(self) -> int:
         return self._uma("insert into public.treinos_modelo default values returning id")["id"]
+
+    def inicia_treino_se_livre(self) -> int | None:
+        """Registra um retreino "rodando", ou None se já houver um. Atômico entre processos.
+
+        Sem a trava, duas APIs (ou a API e `python -m api.retrain`) podiam conferir "nenhum rodando"
+        ao mesmo tempo e iniciar dois retreinos. A trava vale até o commit de quem chamou.
+        """
+        self.con.execute("select pg_advisory_xact_lock(%s)", (_TRAVA_RETREINO,))
+        if self.treino_rodando():
+            return None
+        return self.inicia_treino()
 
     def conclui_treino(self, treino_id: int, *, status: str, correcoes: int = 0, linhas_treino: int = 0,
                        acerto_correcoes_antes: float | None = None, acerto_correcoes_depois: float | None = None,

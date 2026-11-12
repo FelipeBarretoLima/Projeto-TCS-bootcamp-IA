@@ -110,3 +110,16 @@ def test_limite_libera_depois_da_janela(monkeypatch):
     limite.confere("outro")  # cada usuário tem a sua contagem
     agora[0] += 61
     limite.confere("u")
+
+
+def test_excluir_conta_esquece_os_tokens_dela_em_outros_aparelhos():
+    from api import auth
+
+    nunca_vence = float("inf")
+    auth._cache.update({"aparelho-a": (nunca_vence, USUARIO), "aparelho-b": (nunca_vence, USUARIO),
+                        "de-outra-pessoa": (nunca_vence, OUTRO)})
+    try:
+        assert TestClient(app).delete("/api/conta").status_code == 204
+        assert set(auth._cache) == {"de-outra-pessoa"}
+    finally:
+        auth._cache.clear()

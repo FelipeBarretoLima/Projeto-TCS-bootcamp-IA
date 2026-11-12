@@ -48,6 +48,16 @@ def esquece_token(authorization: str | None) -> None:
         _cache.pop(authorization[7:].strip(), None)
 
 
+def esquece_usuario(usuario_id: UUID) -> None:
+    """Conta excluída: todos os tokens dela (outros aparelhos e abas) deixam de valer aqui na hora.
+
+    Sem isto, um token de outro aparelho continuava no cache por até 60 s, e a próxima
+    requisição tentava recriar o perfil de um login que já não existe (erro 500).
+    """
+    for token in [t for t, (_, u) in list(_cache.items()) if u.id == usuario_id]:
+        _cache.pop(token, None)
+
+
 def usuario_atual(authorization: Annotated[str | None, Header()] = None) -> Usuario:
     """Dependência das rotas que precisam de login. 401 se faltar ou não valer o token."""
     if not authorization or not authorization.lower().startswith("bearer "):

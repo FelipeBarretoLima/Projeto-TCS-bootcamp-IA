@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import threading
 from collections.abc import Iterator
 from contextlib import contextmanager
 
@@ -9,6 +10,7 @@ import psycopg
 from psycopg_pool import ConnectionPool
 
 _pool: ConnectionPool | None = None
+_trava_pool = threading.Lock()
 
 
 class BancoNaoConfigurado(Exception):
@@ -28,13 +30,18 @@ def conexao(url: str) -> Iterator[psycopg.Connection]:
     if not url:
         raise BancoNaoConfigurado
     if _pool is None:
-        _pool = _abre(url)
+        with _trava_pool:
+            # confere de novo dentro da trava: duas primeiras requisições ao mesmo tempo criavam
+            # dois pools, e as conexões do que ficava para trás nunca eram fechadas
+            if _pool is None:
+                _pool = _abre(url)
     with _pool.connection() as con:
         yield con
 
 
 def fecha() -> None:
     global _pool
-    if _pool is not None:
-        _pool.close()
-        _pool = None
+    with _trava_pool:
+        if _pool is not None:
+            _pool.close()
+            _pool = None

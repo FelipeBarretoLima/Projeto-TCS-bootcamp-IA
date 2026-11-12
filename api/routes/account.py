@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends, Header, HTTPException, Response
 
 from database.repository import Banco
 
-from ..auth import Usuario, esquece_token, usuario_atual
+from ..auth import Usuario, esquece_token, esquece_usuario, usuario_atual
 from ..dependencies import banco
 from ..schemas import NovoNome, Perfil
 
@@ -35,4 +35,5 @@ def apaga_conta(
     """Apaga o login e tudo o que é do usuário (extratos, transações, conversas), sem volta. LGPD."""
     db.apaga_conta(usuario.id)
     esquece_token(authorization)
+    esquece_usuario(usuario.id)  # e os tokens da mesma conta em outros aparelhos
     return Response(status_code=204)

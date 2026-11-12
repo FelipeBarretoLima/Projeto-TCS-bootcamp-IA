@@ -23,6 +23,7 @@ class BancoFalso:
         self._ids = count(1)
         self._ids_transacao = count(1)
         self.treinos_: list[dict] = []
+        self.correcoes_: list[dict] = []  # public.correcoes: sobrevivem à exclusão do extrato
         self.confirmacoes = 0
 
     def garante_usuario(self, usuario_id, email, nome=""):
@@ -64,6 +65,10 @@ class BancoFalso:
                 herdeiro["linhas_gravadas"] += 1
         del self.extratos[extrato_id]
         self.vinculos = {(x, tid) for x, tid in self.vinculos if x != extrato_id}
+        saem = {t["id"] for t in self.linhas if t["extrato_id"] == extrato_id}
+        for c in self.correcoes_:  # on delete set null: a correção continua valendo
+            if c["transacao_id"] in saem:
+                c["transacao_id"] = None
         self.linhas = [t for t in self.linhas if t["extrato_id"] != extrato_id]
         return True
 
@@ -107,8 +112,17 @@ class BancoFalso:
     def muda_categoria(self, usuario_id, transacao_id, categoria):
         for t in self.linhas:
             if t.get("id") == transacao_id and t["usuario_id"] == usuario_id:
+                agora = datetime.now(timezone.utc)
                 t["categoria"], t["origem_categoria"] = categoria, ("usuario" if categoria else None)
-                t["corrigida_em"] = datetime.now(timezone.utc) if categoria else None
+                t["corrigida_em"] = agora if categoria else None
+                campos = {k: t[k] for k in ("data", "historico", "contraparte", "valor", "tipo", "meio", "banco")}
+                # como no banco real: desfaz, troca a correção órfã da mesma transação e faz o upsert
+                self.correcoes_ = [c for c in self.correcoes_ if c["transacao_id"] != transacao_id and not (
+                    c["usuario_id"] == usuario_id and c["transacao_id"] is None
+                    and {k: c[k] for k in campos} == campos)]
+                if categoria:
+                    self.correcoes_.append({"usuario_id": usuario_id, "transacao_id": transacao_id, **campos,
+                                            "categoria": categoria, "corrigida_em": agora})
                 return True
         return False
 
@@ -118,14 +132,14 @@ class BancoFalso:
     # --- retreino ---
 
     def correcoes_para_treino(self):
-        return sorted((t for t in self.linhas if t.get("origem_categoria") == "usuario" and t["categoria"]),
-                      key=lambda t: t["corrigida_em"])
+        campos = ("data", "historico", "contraparte", "valor", "tipo", "meio", "banco", "categoria", "corrigida_em")
+        return [{k: c[k] for k in campos} for c in sorted(self.correcoes_, key=lambda c: c["corrigida_em"])]
 
     def correcoes_desde_ultimo_treino(self):
-        oks = [t["iniciado_em"] for t in self.treinos_ if t["status"] == "ok"]
-        desde = max(oks) if oks else datetime.min.replace(tzinfo=timezone.utc)
-        return sum(1 for t in self.linhas if t.get("origem_categoria") == "usuario" and t.get("corrigida_em")
-                   and t["corrigida_em"] > desde)
+        # desde a última tentativa concluída (ok ou erro), como no banco real
+        concluidos = [t["iniciado_em"] for t in self.treinos_ if t["status"] != "rodando"]
+        desde = max(concluidos) if concluidos else datetime.min.replace(tzinfo=timezone.utc)
+        return sum(1 for c in self.correcoes_ if c["corrigida_em"] > desde)
 
     def treino_rodando(self):
         return any(t["status"] == "rodando" for t in self.treinos_)
@@ -134,6 +148,9 @@ class BancoFalso:
         self.treinos_.append({"id": len(self.treinos_) + 1, "status": "rodando",
                               "iniciado_em": datetime.now(timezone.utc)})
         return len(self.treinos_)
+
+    def inicia_treino_se_livre(self):
+        return None if self.treino_rodando() else self.inicia_treino()
 
     def conclui_treino(self, treino_id, **registro):
         self.treinos_[treino_id - 1].update(registro)
@@ -151,6 +168,7 @@ class BancoFalso:
         self.extratos = {e: x for e, x in self.extratos.items() if e not in apagados}
         self.vinculos = {(e, t) for e, t in self.vinculos if e not in apagados}
         self.linhas = [t for t in self.linhas if t["usuario_id"] != usuario_id]
+        self.correcoes_ = [c for c in self.correcoes_ if c["usuario_id"] != usuario_id]  # cascata (LGPD)
         conversas = {c for c, x in self.conversas.items() if x["usuario_id"] == usuario_id}
         self.conversas = {c: x for c, x in self.conversas.items() if c not in conversas}
         self.mensagens_ = [m for m in self.mensagens_ if m["conversa_id"] not in conversas]

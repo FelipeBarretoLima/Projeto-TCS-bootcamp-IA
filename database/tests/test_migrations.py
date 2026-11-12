@@ -40,3 +40,9 @@ def test_nenhuma_coluna_de_senha():
     # a senha fica no Supabase Auth; aqui olhamos só o código, sem os comentários "--"
     codigo = re.sub(r"--[^\n]*", "", SQL)
     assert not re.search(r"senha|password", codigo, re.I)
+
+
+def test_todas_as_listas_de_categorias_do_sql_sao_iguais():
+    """transacoes e correcoes repetem a lista: as duas precisam acompanhar ml.classes.Category."""
+    listas = [set(re.findall(r"'([^']+)'", m.group(1))) for m in re.finditer(r"\bcategoria in \((.*?)\)\)", SQL, re.S)]
+    assert len(listas) >= 2 and all(l == {c.value for c in Category} for l in listas)

@@ -109,3 +109,65 @@ def test_treino_usa_so_campos_anonimizados(db, com_csv_base, monkeypatch):
     monkeypatch.setattr(retraining, "retrain", espiona)
     _corrige(cliente, ids)
     assert "original_cifrado" not in vistos["colunas"] and "contraparte_original" not in vistos["colunas"]
+
+
+def test_depois_de_um_erro_nao_retreina_a_cada_correcao(db):
+    # sem CSV base nos testes: o retreino da 15ª correção falha
+    cliente, ids = _importa_e_lista(N + 3)
+    _corrige(cliente, ids[:N])
+    assert [t["status"] for t in db.treinos_] == ["erro"]
+    # antes, cada correção seguinte a um erro disparava outro retreino (que falhava de novo)
+    _corrige(cliente, ids[N:])
+    assert len(db.treinos_) == 1
+
+
+def test_inicio_do_retreino_e_atomico(db, com_csv_base):
+    """Quem inicia o retreino é o banco (inicia_treino_se_livre), não um "confere e depois grava"."""
+    assert db.inicia_treino_se_livre() is not None
+    assert db.inicia_treino_se_livre() is None
+    assert retraining.executa_retreino() is None
+
+
+# --- correções numa tabela própria: sobrevivem à exclusão do extrato ---
+
+def _apaga_o_extrato(cliente):
+    [extrato] = cliente.get("/api/extratos").json()
+    assert cliente.delete(f"/api/extratos/{extrato['id']}").status_code == 204
+
+
+def test_correcao_sobrevive_a_exclusao_do_extrato_e_conta_no_retreino(db, com_csv_base):
+    cliente, ids = _importa_e_lista(N - 1)
+    _corrige(cliente, ids)
+    _apaga_o_extrato(cliente)
+    assert db.linhas == [] and len(db.correcoes_para_treino()) == N - 1
+    # um extrato novo e 1 correção completam as 15: o retreino usa também as do extrato excluído
+    nova = f"{CAB}20/02/2024,-4.70,11111111-2222-4333-8444-999999999999,Compra no débito - UNIVERSIDADE FICTICIA DO SUL\n"
+    assert cliente.post("/api/extratos", files={"arquivo": ("f.csv", nova.encode())}).status_code == 200
+    [t] = cliente.get("/api/transacoes", params={"inicio": "2024-01-01"}).json()
+    _corrige(cliente, [t["id"]])
+    [treino] = db.treinos_
+    assert treino["status"] == "ok" and treino["correcoes"] == N
+
+
+def test_reimportar_e_corrigir_de_novo_nao_duplica_a_correcao(db):
+    cliente, [i] = _importa_e_lista(1)
+    _corrige(cliente, [i])
+    _apaga_o_extrato(cliente)
+    cliente, [j] = _importa_e_lista(1)  # o mesmo arquivo de novo
+    _corrige(cliente, [j], categoria="transporte")
+    [c] = db.correcoes_para_treino()
+    assert c["categoria"] == "transporte"
+
+
+def test_voltar_para_sem_categoria_desfaz_a_correcao(db):
+    cliente, [i] = _importa_e_lista(1)
+    _corrige(cliente, [i])
+    _corrige(cliente, [i], categoria=None)
+    assert db.correcoes_para_treino() == []
+
+
+def test_excluir_a_conta_apaga_as_correcoes(db):
+    cliente, ids = _importa_e_lista(2)
+    _corrige(cliente, ids)
+    assert cliente.delete("/api/conta").status_code == 204
+    assert db.correcoes_para_treino() == []

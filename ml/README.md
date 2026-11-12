@@ -45,13 +45,15 @@ ainda não estão no mapa entram no fim de `estabelecimentos_novos.csv` a cada r
 ## Retreino com as correções dos usuários
 
 Na aba Extrato o usuário corrige a categoria de uma transação (origem `usuario`). A cada **15
-correções novas** (de todos os usuários) desde o último retreino, a API treina o modelo de novo em
+correções novas** (de todos os usuários) desde a última tentativa de retreino (com sucesso ou erro), a API treina o modelo de novo em
 segundo plano e troca o `.pkl` (o anterior fica em `svm_tfidf.anterior.pkl`):
 
 - treino = CSV rotulado base (`ml/dados/transacoes_rotuladas.csv`) + as correções (`ml/retrain.py`);
 - cada correção pesa 5 e substitui o rótulo automático do mesmo estabelecimento no CSV base (menos
   `PESSOA_FISICA` e contraparte vazia); correções que discordam: vale a mais recente;
 - só campos anonimizados entram no treino (nunca o texto original cifrado);
+- as correções ficam numa tabela própria (`correcoes`): sobrevivem à exclusão do extrato e só
+  somem quando o usuário volta a transação para "sem categoria" ou exclui a conta;
 - o modelo novo entra sempre; cada retreino fica registrado na tabela `treinos_modelo` (acerto nas
   correções antes/depois e no CSV base).
 

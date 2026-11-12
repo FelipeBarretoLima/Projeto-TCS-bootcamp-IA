@@ -76,9 +76,9 @@ def executa_retreino() -> dict[str, Any] | None:
         return None
     try:
         with abre_banco() as db:
-            if db.treino_rodando():
+            treino_id = db.inicia_treino_se_livre()  # atômico: outro processo pode estar retreinando
+            if treino_id is None:
                 return None
-            treino_id = db.inicia_treino()
             correcoes = _como_tabela(db.correcoes_para_treino())
         try:
             r = retrain(read_base(config.CAMINHO_TREINO_BASE), correcoes, carrega_modelo(config.CAMINHO_MODELO))
