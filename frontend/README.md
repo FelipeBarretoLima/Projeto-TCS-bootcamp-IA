@@ -17,6 +17,21 @@ Em desenvolvimento, o Vite repassa tudo o que começa com `/api` para a API em `
 
 Outros comandos: `npm run build` (confere os tipos e gera `dist/`) e `npm run lint`.
 
+### Testar no celular
+
+```bash
+npm run dev:celular   # https://<IP-do-computador>:5173 (aparece na linha "Network")
+```
+
+- O celular precisa estar na **mesma rede** do computador. Redes institucionais/de convidados
+  costumam bloquear um aparelho de acessar outro (isolamento de clientes): nesse caso, conecte o
+  computador ao hotspot do próprio celular.
+- É HTTPS com certificado de teste: o navegador avisa que o site "não é seguro" na primeira vez;
+  toque em **Avançado > Continuar**. Sem HTTPS, o navegador bloqueia o microfone da mensagem de voz.
+- A API continua só no computador (`localhost:8000`): o Vite faz a ponte, como no `npm run dev`.
+- No PowerShell, `npm run dev -- --host` **não** funciona (o `--` some no caminho); use o
+  `dev:celular`.
+
 ## Estrutura
 
 ```

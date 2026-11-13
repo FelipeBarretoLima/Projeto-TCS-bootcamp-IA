@@ -1,10 +1,19 @@
 // Chat do Assistente TAS: conversas anteriores (carregadas ao entrar), mensagens com gráfico e
 // sugestões de pergunta.
 
-import { Bot, MessagesSquare, Pencil, Plus, SendHorizontal, Trash2 } from 'lucide-react'
+import { Bot, MessagesSquare, Mic, Pencil, Plus, SendHorizontal, Square, Trash2, X } from 'lucide-react'
 import { useEffect, useRef, useState, type FormEvent } from 'react'
-import { ErroApi, apagaConversa, buscaMensagens, listaConversas, pergunta, renomeiaConversa } from '../api/cliente'
+import {
+  ErroApi,
+  apagaConversa,
+  buscaMensagens,
+  listaConversas,
+  pergunta,
+  renomeiaConversa,
+  transcreveAudio,
+} from '../api/cliente'
 import type { Conversa, Mensagem } from '../api/tipos'
+import { DURACAO_MAXIMA, microfoneDisponivel, useGravadorDeVoz } from '../hooks/useGravadorDeVoz'
 import { Grafico } from './Grafico'
 import estilos from './Assistente.module.css'
 
@@ -18,6 +27,11 @@ const SUGESTOES = [
 const mensagemDeErro = (e: unknown) =>
   e instanceof ErroApi ? e.message : 'Não foi possível falar com a API. Tente de novo.'
 
+const minutos = (s: number) => `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`
+
+// o microfone só existe em HTTPS ou localhost (ex.: no celular por http://IP:5173 ele fica bloqueado)
+const MICROFONE = microfoneDisponivel()
+
 export function Assistente() {
   const [conversas, setConversas] = useState<Conversa[]>([])
   const [atual, setAtual] = useState<string | null>(null)
@@ -30,7 +44,28 @@ export function Assistente() {
   const [renomeando, setRenomeando] = useState<{ id: string; titulo: string } | null>(null)
   // lista de conversas aberta no celular (no computador ela aparece sempre; ver Assistente.module.css)
   const [listaAberta, setListaAberta] = useState(false)
+  const [transcrevendo, setTranscrevendo] = useState(false)
   const fimRef = useRef<HTMLDivElement>(null)
+  const campoRef = useRef<HTMLInputElement>(null)
+
+  // mensagem de voz: grava, a API transcreve e o texto vai para o campo (o usuário confere e envia)
+  const gravador = useGravadorDeVoz({
+    aoErrar: setErro,
+    aoConcluir: async (audio) => {
+      setErro(null)
+      setTranscrevendo(true)
+      try {
+        const falado = await transcreveAudio(audio)
+        setTexto((atual) => (atual.trim() ? `${atual.trim()} ${falado}` : falado).slice(0, 1000))
+        campoRef.current?.focus()
+      } catch (e) {
+        setErro(mensagemDeErro(e))
+      } finally {
+        setTranscrevendo(false)
+      }
+    },
+  })
+  const gravando = gravador.fase === 'gravando'
   const salvouTitulo = useRef<{ id: string; titulo: string } | null>(null)
 
   async function salvaTitulo() {
@@ -274,17 +309,66 @@ export function Assistente() {
           )}
 
           <form className={estilos.entrada} onSubmit={aoEnviar}>
-            <input
-              value={texto}
-              onChange={(e) => setTexto(e.target.value)}
-              placeholder="Pergunte sobre suas finanças…"
-              aria-label="Sua pergunta"
-              maxLength={1000}
-              disabled={pensando}
-            />
-            <button type="submit" disabled={pensando || !texto.trim()} aria-label="Enviar pergunta">
-              <SendHorizontal size={18} />
-            </button>
+            {gravando ? (
+              <>
+                <button
+                  type="button"
+                  className={estilos.cancelarVoz}
+                  onClick={gravador.cancela}
+                  aria-label="Descartar a gravação"
+                  title="Descartar"
+                >
+                  <X size={18} />
+                </button>
+                <p className={estilos.gravando} role="status">
+                  <span className={estilos.pontoGravando} aria-hidden="true" />
+                  Gravando… {minutos(gravador.segundos)}
+                  <span className={estilos.limiteVoz}> / {minutos(DURACAO_MAXIMA)}</span>
+                </p>
+                <button
+                  type="button"
+                  className={estilos.pararVoz}
+                  onClick={gravador.para}
+                  aria-label="Parar e transcrever a gravação"
+                  title="Parar e transcrever"
+                >
+                  <Square size={16} fill="currentColor" />
+                </button>
+              </>
+            ) : (
+              <>
+                <input
+                  ref={campoRef}
+                  value={texto}
+                  onChange={(e) => setTexto(e.target.value)}
+                  placeholder={transcrevendo ? 'Transcrevendo o áudio…' : 'Pergunte sobre suas finanças…'}
+                  aria-label="Sua pergunta"
+                  maxLength={1000}
+                  disabled={pensando || transcrevendo}
+                />
+                <button
+                  type="button"
+                  className={estilos.microfone}
+                  onClick={() => void gravador.inicia()}
+                  disabled={!MICROFONE || pensando || transcrevendo}
+                  aria-label="Gravar mensagem de voz"
+                  title={
+                    MICROFONE
+                      ? 'Gravar mensagem de voz'
+                      : 'Microfone indisponível: o navegador só libera o microfone em sites HTTPS'
+                  }
+                >
+                  <Mic size={18} />
+                </button>
+                <button
+                  type="submit"
+                  disabled={pensando || transcrevendo || !texto.trim()}
+                  aria-label="Enviar pergunta"
+                >
+                  <SendHorizontal size={18} />
+                </button>
+              </>
+            )}
           </form>
         </div>
       </div>

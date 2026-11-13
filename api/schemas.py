@@ -157,6 +157,10 @@ class RespostaChat(BaseModel):
     resposta: Mensagem
 
 
+class Transcricao(BaseModel):
+    texto: str  # o que foi falado no áudio; o usuário confere antes de enviar como pergunta
+
+
 class NovaCategoria(BaseModel):
     categoria: str | None  # uma das 8 categorias; None = sem categoria
 

@@ -5,7 +5,7 @@ import pytest
 from api import config
 from api.auth import usuario_atual
 from api.dependencies import abre_banco, banco
-from api.rate_limit import LIMITE_CHAT, LIMITE_IMPORTACAO
+from api.rate_limit import LIMITE_CHAT, LIMITE_IMPORTACAO, LIMITE_TRANSCRICAO
 from api.main import app
 from api.tests.fakes import USUARIO, BancoFalso
 
@@ -72,3 +72,4 @@ def limites_zerados():
     """Cada teste começa sem usos contados no limite por usuário."""
     LIMITE_CHAT.zera()
     LIMITE_IMPORTACAO.zera()
+    LIMITE_TRANSCRICAO.zera()

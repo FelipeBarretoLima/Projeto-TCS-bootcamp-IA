@@ -38,6 +38,8 @@ class Limite:
 
 LIMITE_CHAT = Limite(10, 60, "perguntas")  # 10 perguntas por minuto
 LIMITE_IMPORTACAO = Limite(20, 600, "importações")  # 20 extratos a cada 10 minutos
+# separado do chat: uma pergunta por voz gasta uma transcrição + uma pergunta, sem dividir o limite
+LIMITE_TRANSCRICAO = Limite(10, 60, "mensagens de voz")  # 10 por minuto
 
 
 def limita_chat(usuario: Annotated[Usuario, Depends(usuario_atual)]) -> None:
@@ -46,3 +48,7 @@ def limita_chat(usuario: Annotated[Usuario, Depends(usuario_atual)]) -> None:
 
 def limita_importacao(usuario: Annotated[Usuario, Depends(usuario_atual)]) -> None:
     LIMITE_IMPORTACAO.confere(str(usuario.id))
+
+
+def limita_transcricao(usuario: Annotated[Usuario, Depends(usuario_atual)]) -> None:
+    LIMITE_TRANSCRICAO.confere(str(usuario.id))

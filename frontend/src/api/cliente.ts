@@ -121,3 +121,12 @@ export function pergunta(mensagem: string, conversaId: string | null): Promise<R
     body: JSON.stringify({ mensagem, conversa_id: conversaId }),
   })
 }
+
+/** Mensagem de voz: a API transcreve (nada é gravado) e o texto volta para o usuário conferir. */
+export async function transcreveAudio(audio: Blob): Promise<string> {
+  const formulario = new FormData()
+  const extensao = audio.type.includes('mp4') ? 'm4a' : audio.type.includes('ogg') ? 'ogg' : 'webm'
+  formulario.append('audio', audio, `mensagem-de-voz.${extensao}`)
+  const r = await chama<{ texto: string }>('/api/chat/transcricao', { method: 'POST', body: formulario })
+  return r.texto
+}

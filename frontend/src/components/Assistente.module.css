@@ -348,6 +348,70 @@
   cursor: default;
 }
 
+/* --- mensagem de voz --- */
+
+.entrada .microfone,
+.entrada .cancelarVoz {
+  border: 1px solid var(--borda);
+  background: var(--superficie);
+  color: var(--tinta-suave);
+}
+
+.entrada .microfone:hover:not(:disabled),
+.entrada .cancelarVoz:hover {
+  border-color: var(--azul);
+  color: var(--azul-texto);
+}
+
+.entrada .pararVoz {
+  background: var(--vermelho);
+}
+
+.gravando {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  min-width: 0;
+  height: 2.9rem;
+  margin: 0;
+  padding: 0 1.1rem;
+  border: 1px solid var(--vermelho);
+  border-radius: 999px;
+  background: var(--vermelho-fundo);
+  color: var(--tinta);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.limiteVoz {
+  margin-left: -0.3rem;
+  color: var(--tinta-suave);
+  font-weight: 400;
+}
+
+.pontoGravando {
+  flex: none;
+  width: 0.6rem;
+  height: 0.6rem;
+  border-radius: 50%;
+  background: var(--vermelho);
+  animation: pulsa 1.2s ease-in-out infinite;
+}
+
+@keyframes pulsa {
+  50% {
+    opacity: 0.3;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pontoGravando {
+    animation: none;
+  }
+}
+
 /* botão "Conversas" que abre/fecha a lista: só existe no celular (abaixo) */
 .alternaLista {
   display: none;
