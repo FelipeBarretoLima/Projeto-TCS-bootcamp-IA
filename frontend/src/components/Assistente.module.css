@@ -348,6 +348,11 @@
   cursor: default;
 }
 
+/* botão "Conversas" que abre/fecha a lista: só existe no celular (abaixo) */
+.alternaLista {
+  display: none;
+}
+
 @media (max-width: 860px) {
   .corpo {
     grid-template-columns: 1fr;
@@ -358,7 +363,52 @@
     border-bottom: 1px solid var(--borda);
   }
 
+  /* lista recolhida por padrão: o chat fica com o espaço da tela */
+  .conversas:not(.listaAberta) {
+    display: none;
+  }
+
   .conversas ul {
-    max-height: 9rem;
+    max-height: 14rem;
+  }
+
+  .alternaLista {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    min-height: 2.75rem;
+    margin-left: auto;
+    padding: 0 0.95rem;
+    border: 1px solid var(--borda);
+    border-radius: 999px;
+    background: var(--superficie);
+    color: var(--tinta);
+    font: inherit;
+    font-size: 0.875rem;
+    font-weight: 600;
+    cursor: pointer;
+  }
+
+  .alternaLista[aria-expanded='true'] {
+    border-color: var(--azul);
+    color: var(--azul-texto);
+  }
+
+  /* mensagens com altura proporcional à tela, sem ficar minúsculas nem passar da tela */
+  .mensagens {
+    min-height: 18rem;
+    max-height: min(34rem, 62svh);
+  }
+
+  /* 16px: abaixo disso o iPhone dá zoom ao tocar no campo */
+  .renomear {
+    font-size: 1rem;
+  }
+}
+
+/* telas de toque não têm hover: renomear e apagar ficam sempre visíveis */
+@media (hover: none) {
+  .apagar {
+    opacity: 1;
   }
 }

@@ -1,7 +1,7 @@
 // Chat do Assistente TAS: conversas anteriores (carregadas ao entrar), mensagens com gráfico e
 // sugestões de pergunta.
 
-import { Bot, Pencil, Plus, SendHorizontal, Trash2 } from 'lucide-react'
+import { Bot, MessagesSquare, Pencil, Plus, SendHorizontal, Trash2 } from 'lucide-react'
 import { useEffect, useRef, useState, type FormEvent } from 'react'
 import { ErroApi, apagaConversa, buscaMensagens, listaConversas, pergunta, renomeiaConversa } from '../api/cliente'
 import type { Conversa, Mensagem } from '../api/tipos'
@@ -28,6 +28,8 @@ export function Assistente() {
   const [erro, setErro] = useState<string | null>(null)
   const [confirmando, setConfirmando] = useState<string | null>(null) // conversa à espera do "Apagar"
   const [renomeando, setRenomeando] = useState<{ id: string; titulo: string } | null>(null)
+  // lista de conversas aberta no celular (no computador ela aparece sempre; ver Assistente.module.css)
+  const [listaAberta, setListaAberta] = useState(false)
   const fimRef = useRef<HTMLDivElement>(null)
   const salvouTitulo = useRef<{ id: string; titulo: string } | null>(null)
 
@@ -69,6 +71,7 @@ export function Assistente() {
 
   async function abre(id: string) {
     if (id === atual || pensando) return
+    setListaAberta(false)
     setErro(null)
     setAtual(id)
     setMensagens([])
@@ -81,6 +84,7 @@ export function Assistente() {
 
   function nova() {
     if (pensando) return
+    setListaAberta(false)
     setAtual(null)
     setMensagens([])
     setErro(null)
@@ -140,10 +144,23 @@ export function Assistente() {
           <Bot size={18} />
         </span>
         <h2 id="titulo-assistente">Assistente TAS</h2>
+        <button
+          type="button"
+          className={estilos.alternaLista}
+          onClick={() => setListaAberta((aberta) => !aberta)}
+          aria-expanded={listaAberta}
+          aria-controls="lista-conversas"
+        >
+          <MessagesSquare size={16} /> Conversas{conversas.length > 0 && ` (${conversas.length})`}
+        </button>
       </header>
 
       <div className={estilos.corpo}>
-        <nav className={estilos.conversas} aria-label="Conversas">
+        <nav
+          id="lista-conversas"
+          className={`${estilos.conversas} ${listaAberta ? estilos.listaAberta : ''}`}
+          aria-label="Conversas"
+        >
           <button type="button" className={estilos.nova} onClick={nova} disabled={pensando}>
             <Plus size={16} /> Nova conversa
           </button>

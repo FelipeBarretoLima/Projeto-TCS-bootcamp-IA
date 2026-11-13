@@ -18,6 +18,7 @@ import {
   YAxis,
 } from 'recharts'
 import type { Grafico as DadosGrafico } from '../api/tipos'
+import { useTelaEstreita } from '../hooks/useTelaEstreita'
 import { formataMoeda, formataMoedaCurta } from '../utils/formatacao'
 import estilos from './Grafico.module.css'
 
@@ -44,6 +45,10 @@ const dica = {
 
 export function Grafico({ dados, altura = 300, mostraTitulo = true }: Props) {
   const [ocultas, setOcultas] = useState<Set<string>>(new Set())
+  // celular: rótulos das barras horizontais mais estreitos (no computador ficam 150px, sem cortar)
+  const estreita = useTelaEstreita()
+  const larguraRotulo = estreita ? 96 : 150
+  const encurta = (rotulo: string) => (estreita && rotulo.length > 13 ? `${rotulo.slice(0, 12)}…` : rotulo)
   const formata = (v: unknown) => (dados.formato === 'moeda' ? formataMoeda(Number(v)) : String(v))
 
   // Recharts quer uma linha por rótulo: {rotulo: 'jan/24', Receitas: 10, Despesas: 5}
@@ -113,7 +118,15 @@ export function Grafico({ dados, altura = 300, mostraTitulo = true }: Props) {
       <BarChart data={linhas} layout="vertical" margin={{ top: 4, right: 16, left: 8, bottom: 0 }}>
         <CartesianGrid stroke="var(--grafico-grade)" strokeDasharray="3 3" horizontal={false} />
         <XAxis type="number" tick={eixo} tickFormatter={formataMoedaCurta} tickLine={false} axisLine={false} />
-        <YAxis type="category" dataKey="rotulo" tick={eixo} tickLine={false} axisLine={false} width={150} />
+        <YAxis
+          type="category"
+          dataKey="rotulo"
+          tick={eixo}
+          tickFormatter={encurta}
+          tickLine={false}
+          axisLine={false}
+          width={larguraRotulo}
+        />
         <Tooltip {...dica} formatter={formata} />
         {dados.series.map((s, i) => (
           <Bar key={s.nome} dataKey={s.nome} fill={cor(i)} radius={[0, 6, 6, 0]} maxBarSize={28} />
