@@ -82,9 +82,10 @@ A tradução foi **encerrada por decisão do usuário** depois de `ml/`:
   onde representam esses campos.
 - Valores dos enums (`"entrada"`, `"saida"`, `"pix"`, `"mercado"`...). O nome do enum e dos membros
   pode ser traduzido (`TransactionType.INCOME = "entrada"`).
-- Pastas e arquivos de dados locais (fora do git, cada colega tem os seus): `data/privado/`,
-  `data/raw/`, `data/saida/`, `ml/dados/`, `ml/modelos/svm_tfidf.pkl`, e os nomes dos arquivos
-  gravados neles (`revisar.csv`, `historicos_desconhecidos.csv`...).
+- Pastas e arquivos de dados locais (fora do git, cada colega tem os seus): `ml/dados/`,
+  `ml/modelos/svm_tfidf.pkl`, e os nomes dos arquivos gravados em `data/` (`revisar.csv`,
+  `historicos_desconhecidos.csv`...). As subpastas de `data/` já foram traduzidas (2026-11-15):
+  `data/private/`, `data/output/`, `data/raw/`, `data/test/`, `data/test_output/`, `data/labels/`.
 - Pasta `dados/` dentro do pacote `statement` (listas públicas usadas por `files("statement")`).
 
 ### Interface de linha de comando e ambiente

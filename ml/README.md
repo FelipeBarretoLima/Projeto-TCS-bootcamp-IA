@@ -1,11 +1,11 @@
 # Módulo de ML
 
 Classifica cada transação do CSV do parser em uma de 8 categorias. O parser (`python -m statement tudo`)
-gera `data/saida/transacoes.csv` **sem** categoria; este módulo rotula o treino, compara modelos e
+gera `data/output/transacoes.csv` **sem** categoria; este módulo rotula o treino, compara modelos e
 gera o modelo final.
 
 ```
-extrato (parser)  ->  data/saida/transacoes.csv            (8 colunas)
+extrato (parser)  ->  data/output/transacoes.csv            (8 colunas)
 ml.label        ->  ml/dados/transacoes_rotuladas.csv    (as mesmas 8 + categoria)   treino
 ml.train        ->  ml/modelos/svm_tfidf.pkl             (modelo final)
 .pkl              ->  CSV do parser + categoria prevista                               aplicação
@@ -38,8 +38,8 @@ python -m ml.train       # CSV rotulado -> ml/modelos/svm_tfidf.pkl
 ```
 
 A categoria do treino vem de regras (receitas, financeiro, contas, transferência para pessoa) e, para
-compras em estabelecimento, do mapa revisado à mão em `data/privado/estabelecimentos_revisar.csv` e
-`data/privado/estabelecimentos_novos.csv` (classe em branco = aceita a sugerida). Estabelecimentos que
+compras em estabelecimento, do mapa revisado à mão em `data/private/estabelecimentos_revisar.csv` e
+`data/private/estabelecimentos_novos.csv` (classe em branco = aceita a sugerida). Estabelecimentos que
 ainda não estão no mapa entram no fim de `estabelecimentos_novos.csv` a cada rotulagem.
 
 ## Retreino com as correções dos usuários
@@ -72,11 +72,11 @@ O pré-processamento está dentro do `.pkl`: ele recebe o CSV do parser como est
 ```python
 import joblib, pandas as pd
 modelo = joblib.load("ml/modelos/svm_tfidf.pkl")
-extrato = pd.read_csv("data/teste_saida/u99.csv", keep_default_na=False)
+extrato = pd.read_csv("data/test_output/u99.csv", keep_default_na=False)
 extrato["categoria_prevista"] = modelo.predict(extrato)
 ```
 
-Extratos de teste ficam **fora de `data/raw/`** (ex.: `data/teste/`), para não entrarem no treino.
+Extratos de teste ficam **fora de `data/raw/`** (ex.: `data/test/`), para não entrarem no treino.
 
 ## Classes
 

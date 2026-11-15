@@ -10,7 +10,7 @@ RAIZ_PROJETO = Path(__file__).resolve().parents[1]
 load_dotenv(RAIZ_PROJETO / ".env")
 
 # Mapas do usuário (pessoas marcadas). A API só lê esta pasta, nunca grava nela.
-DIR_PRIVADO = RAIZ_PROJETO / "data" / "privado"
+DIR_PRIVADO = RAIZ_PROJETO / "data" / "private"
 
 # Classificador treinado (python -m ml.train). Fora do git; sem ele, as saídas ficam sem categoria.
 CAMINHO_MODELO = RAIZ_PROJETO / "ml" / "modelos" / "svm_tfidf.pkl"

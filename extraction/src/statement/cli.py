@@ -1,7 +1,7 @@
 """CLI.
 
-python -m statement extrair --entrada data/raw/<pasta> --usuario u07 --saida data/saida/u07.csv
-python -m statement tudo                       (every folder in data/raw -> data/saida/transacoes.csv)
+python -m statement extrair --entrada data/raw/<pasta> --usuario u07 --saida data/output/u07.csv
+python -m statement tudo                       (every folder in data/raw -> data/output/transacoes.csv)
 """
 
 from __future__ import annotations
@@ -22,11 +22,11 @@ def _parser_args() -> argparse.ArgumentParser:
     extract_cmd.add_argument("--saida", dest="output", type=Path, required=True, help="CSV de saída")
     all_cmd = sub.add_parser("tudo", help="processa cada pasta de --raw (pasta N = usuário uNN) e junta num CSV único")
     all_cmd.add_argument("--raw", type=Path, default=Path("data/raw"), help="padrão: data/raw")
-    all_cmd.add_argument("--saida", dest="output", type=Path, default=Path("data/saida/transacoes.csv"),
-                    help="CSV geral (padrão: data/saida/transacoes.csv); os CSVs por usuário ficam ao lado")
+    all_cmd.add_argument("--saida", dest="output", type=Path, default=Path("data/output/transacoes.csv"),
+                    help="CSV geral (padrão: data/output/transacoes.csv); os CSVs por usuário ficam ao lado")
     for p in (extract_cmd, all_cmd):
-        p.add_argument("--privado", dest="private", type=Path, default=Path("data/privado"),
-                       help="pasta de revisar.csv e historicos_desconhecidos.csv (padrão: data/privado)")
+        p.add_argument("--privado", dest="private", type=Path, default=Path("data/private"),
+                       help="pasta de revisar.csv e historicos_desconhecidos.csv (padrão: data/private)")
     return ap
 
 

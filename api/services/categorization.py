@@ -3,7 +3,7 @@
     1. entrada (dinheiro recebido)  -> "receitas"                  origem "regra"
     2. saída                         -> classificador ml/modelos/*.pkl  origem "modelo"
 
-As regras fixas e o mapa de estabelecimentos (ml.classes.by_rule, data/privado) não entram aqui:
+As regras fixas e o mapa de estabelecimentos (ml.classes.by_rule, data/private) não entram aqui:
 eles só geram os rótulos do treino (python -m ml.label). O modelo aprendeu o que eles faziam.
 Medido no CSV rotulado, só nas saídas: ~99% de acerto em estabelecimento já visto, 100% em PIX
 para pessoa/tarifa/fatura e ~81% em estabelecimento nunca visto (validação cruzada por loja).

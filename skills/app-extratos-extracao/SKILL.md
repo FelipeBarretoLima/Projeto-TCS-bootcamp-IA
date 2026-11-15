@@ -66,10 +66,10 @@ No `pyproject.toml`: `packages.find.where = ["extraction/src"]` e `package-data`
    saída):
    1. `historico = normalize_history(patterns.remove(bruto, nomes_do_titular))`;
    2. `meio = parser.METHODS[historico]`. O mapa é explícito: um histórico fora dele rejeita o
-      arquivo (`HistoricoDesconhecido`) e é anotado em `data/privado/historicos_desconhecidos.csv`
+      arquivo (`HistoricoDesconhecido`) e é anotado em `data/private/historicos_desconhecidos.csv`
       para ser incluído;
    3. `contraparte = resolve_counterparty(nome, documento, meio, nomes)`. O resultado é o valor
-      final ou `Review(motivo)`. Nesse caso a linha vai para `data/privado/revisar.csv` e sai da
+      final ou `Review(motivo)`. Nesse caso a linha vai para `data/private/revisar.csv` e sai da
       saída;
    4. `merchants.standardize`: nome-base do estabelecimento e pessoa na maquininha →
       `PESSOA_FISICA`;
@@ -129,7 +129,7 @@ validador, CLI).
    inventadas (`monkeypatch.setattr("statement.parsers.<modulo>.pdf_text", ...)`). Exemplos em
    [references/parsers.md](references/parsers.md).
 10. **Rode contra o arquivo real** na máquina do usuário:
-    `python -m statement extrair --entrada data/raw/7 --usuario u07 --saida data/saida/u07.csv`.
+    `python -m statement extrair --entrada data/raw/7 --usuario u07 --saida data/output/u07.csv`.
     Confira no relatório: reconciliação `ok`, `revisar` zerado ou explicado, nenhum histórico
     desconhecido. Rejeições viram ajustes no parser, com um teste novo para cada variante de layout.
 
@@ -179,11 +179,11 @@ mudar o contrato.
 ## CLI e arquivos
 
 ```bash
-python -m statement extrair --entrada <pasta|arquivo> --usuario uNN --saida data/saida/uNN.csv
-python -m statement tudo        # cada subpasta N de data/raw/ é o usuário uNN; junta em data/saida/transacoes.csv
+python -m statement extrair --entrada <pasta|arquivo> --usuario uNN --saida data/output/uNN.csv
+python -m statement tudo        # cada subpasta N de data/raw/ é o usuário uNN; junta em data/output/transacoes.csv
 ```
 
-- `--privado` (padrão `data/privado`) recebe `revisar.csv` e `historicos_desconhecidos.csv`. Os
+- `--privado` (padrão `data/private`) recebe `revisar.csv` e `historicos_desconhecidos.csv`. Os
   dois têm dados reais e ficam fora do git. Cada execução substitui só as linhas daquele usuário.
 - `<saida>.relatorio.csv` traz só contagens por arquivo.
 - Códigos de saída: `0` tudo aceito, `1` algum arquivo rejeitado, `2` gravação bloqueada por

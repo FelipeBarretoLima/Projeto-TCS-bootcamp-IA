@@ -404,8 +404,8 @@ def write_csv(lines, path, holder_names) -> None:
 
 ## 5. `cli.py`
 
-- `extrair --entrada <pasta|arquivo> --usuario uNN --saida <csv> [--privado data/privado]`
-- `tudo [--raw data/raw] [--saida data/saida/transacoes.csv] [--privado data/privado]`. Cada
+- `extrair --entrada <pasta|arquivo> --usuario uNN --saida <csv> [--privado data/private]`
+- `tudo [--raw data/raw] [--saida data/output/transacoes.csv] [--privado data/private]`. Cada
   subpasta numérica N vira o usuário `uNN`; uma pasta que não é número é erro, porque o pseudônimo
   não pode ser adivinhado.
 - Os nomes das flags ficam em português; o código interno usa `dest=` em inglês

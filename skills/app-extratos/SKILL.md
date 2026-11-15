@@ -210,7 +210,7 @@ até existir um `.pkl`.
 ## Comandos da aplicação pronta
 
 ```bash
-python -m statement tudo            # extratos de data/raw/ -> data/saida/transacoes.csv
+python -m statement tudo            # extratos de data/raw/ -> data/output/transacoes.csv
 python -m ml.label                  # CSV do parser -> ml/dados/transacoes_rotuladas.csv
 python -m ml.train                  # CSV rotulado -> ml/modelos/svm_tfidf.pkl
 python -m database.migrate          # cria/atualiza as tabelas (--status só lista)

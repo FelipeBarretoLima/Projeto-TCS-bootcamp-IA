@@ -1,14 +1,14 @@
 """Training labeling: the parser's CSV + a `categoria` column (rules + merchant map).
 
     python -m ml.label
-        [--entrada data/saida/transacoes.csv] [--saida ml/dados/transacoes_rotuladas.csv]
-        [--privado data/privado]
+        [--entrada data/output/transacoes.csv] [--saida ml/dados/transacoes_rotuladas.csv]
+        [--privado data/private]
 
 Input: exactly the parser's CSV (8-column contract). Output: the same columns, in the same
 order and with the same values, plus `categoria` at the end. Nothing else changes: at inference,
 the parser delivers the same CSV without the category and the classifier adds the column.
 
-Merchant map (data/privado, outside git — it has real names), maintained by the user:
+Merchant map (data/private, outside git — it has real names), maintained by the user:
     estabelecimentos_revisar.csv   first map (priority)
     estabelecimentos_novos.csv     extended on each labeling with what is not mapped yet
     In both, a blank class = accepts the suggested class (user decision on 2026-11-04).
@@ -161,9 +161,9 @@ def label_csv(source: Path, output: Path, private_dir: Path) -> LabelResult:
 
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(prog="python -m ml.label", description="rotula o CSV do parser para o treino")
-    ap.add_argument("--entrada", dest="source", type=Path, default=Path("data/saida/transacoes.csv"))
+    ap.add_argument("--entrada", dest="source", type=Path, default=Path("data/output/transacoes.csv"))
     ap.add_argument("--saida", dest="output", type=Path, default=Path("ml/dados/transacoes_rotuladas.csv"))
-    ap.add_argument("--privado", dest="private", type=Path, default=Path("data/privado"))
+    ap.add_argument("--privado", dest="private", type=Path, default=Path("data/private"))
     args = ap.parse_args(argv)
     try:
         res = label_csv(args.source, args.output, args.private)
