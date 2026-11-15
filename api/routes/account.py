@@ -1,4 +1,4 @@
-"""Conta do usuário: nome do perfil e exclusão da conta (a senha é trocada direto no Supabase Auth)."""
+"""User account: profile name and account deletion (the password is changed directly in Supabase Auth)."""
 
 from typing import Annotated
 
@@ -6,34 +6,34 @@ from fastapi import APIRouter, Depends, Header, HTTPException, Response
 
 from database.repository import Database
 
-from ..auth import Usuario, esquece_token, esquece_usuario, usuario_atual
-from ..dependencies import banco
-from ..schemas import NovoNome, Perfil
+from ..auth import User, current_user, forget_token, forget_user
+from ..dependencies import database
+from ..schemas import NewName, Profile
 
 router = APIRouter(tags=["conta"])
 
 
 @router.patch("/perfil")
-def muda_nome(
-    novo: NovoNome, usuario: Annotated[Usuario, Depends(usuario_atual)], db: Annotated[Database, Depends(banco)]
-) -> Perfil:
-    """Guarda o nome no perfil (o frontend grava o mesmo nome nos metadados do login)."""
-    nome = novo.nome.strip()
-    if not nome:
+def rename_user(
+    new: NewName, user: Annotated[User, Depends(current_user)], db: Annotated[Database, Depends(database)]
+) -> Profile:
+    """Saves the name in the profile (the frontend saves the same name in the login metadata)."""
+    name = new.nome.strip()
+    if not name:
         raise HTTPException(400, "o nome não pode ficar vazio")
-    db.ensure_user(usuario.id, usuario.email, nome)
-    db.rename_user(usuario.id, nome)
-    return Perfil(nome=nome, email=usuario.email)
+    db.ensure_user(user.id, user.email, name)
+    db.rename_user(user.id, name)
+    return Profile(nome=name, email=user.email)
 
 
 @router.delete("/conta", status_code=204)
-def apaga_conta(
-    usuario: Annotated[Usuario, Depends(usuario_atual)],
-    db: Annotated[Database, Depends(banco)],
+def delete_account(
+    user: Annotated[User, Depends(current_user)],
+    db: Annotated[Database, Depends(database)],
     authorization: Annotated[str | None, Header()] = None,
 ) -> Response:
-    """Apaga o login e tudo o que é do usuário (extratos, transações, conversas), sem volta. LGPD."""
-    db.delete_account(usuario.id)
-    esquece_token(authorization)
-    esquece_usuario(usuario.id)  # e os tokens da mesma conta em outros aparelhos
+    """Deletes the login and everything that belongs to the user (statements, transactions, conversations), for good. LGPD."""
+    db.delete_account(user.id)
+    forget_token(authorization)
+    forget_user(user.id)  # and the tokens of the same account on other devices
     return Response(status_code=204)

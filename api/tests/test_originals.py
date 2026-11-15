@@ -1,6 +1,6 @@
-"""Texto original (sem anonimizar): cifrado no banco, mostrado só ao dono, fora do ML e do chat.
+"""Original text (not anonymized): encrypted in the database, shown only to the owner, out of ML and chat.
 
-Nomes inventados.
+Made-up names.
 """
 
 import pytest
@@ -10,99 +10,99 @@ from fastapi.testclient import TestClient
 from agent import queries
 from api import cipher, config
 from api.main import app
-from api.tests.fakes import OUTRO, USUARIO
+from api.tests.fakes import OTHER_USER, USER
 from statement.models import INDIVIDUAL_PERSON
 
-CAB = "Data,Valor,Identificador,Descrição\n"
+HEADER = "Data,Valor,Identificador,Descrição\n"
 PIX = ("02/01/2024,-50.00,11111111-2222-4333-8444-555555555555,Transferência enviada pelo Pix - "
        "ZEFERINO INVENTADO SILVA - •••.123.456-•• - BANCO FICTICIO (0001) Agência: 1 Conta: 123-4\n")
-CARTAO = "03/01/2024,-12.50,11111111-2222-4333-8444-555555555556,Compra no débito - IFOOD *PIZZARIA IMAGINARIA\n"
+CARD = "03/01/2024,-12.50,11111111-2222-4333-8444-555555555556,Compra no débito - IFOOD *PIZZARIA IMAGINARIA\n"
 
 
-def _envia():
-    return TestClient(app).post("/api/extratos", files={"arquivo": ("e.csv", (CAB + PIX + CARTAO).encode())})
+def _upload():
+    return TestClient(app).post("/api/extratos", files={"arquivo": ("e.csv", (HEADER + PIX + CARD).encode())})
 
 
-# --- cifra ---
+# --- cipher ---
 
-def test_cifra_e_decifra():
+def test_encrypt_and_decrypt():
     original = {"historico": "PIX ENVIADO", "contraparte": "ZEFERINO INVENTADO SILVA"}
-    texto = cipher.cifra(original)
-    assert "ZEFERINO" not in texto
-    assert cipher.decifra(texto) == original
+    text = cipher.encrypt(original)
+    assert "ZEFERINO" not in text
+    assert cipher.decrypt(text) == original
 
 
-def test_sem_chave_nao_cifra_nem_decifra(monkeypatch):
-    texto = cipher.cifra({"historico": "", "contraparte": "X"})
-    monkeypatch.setattr(config, "CHAVE_ORIGINAIS", "")
-    assert not cipher.ativa()
-    assert cipher.cifra({"historico": "", "contraparte": "X"}) is None
-    assert cipher.decifra(texto) is None
+def test_without_key_neither_encrypts_nor_decrypts(monkeypatch):
+    text = cipher.encrypt({"historico": "", "contraparte": "X"})
+    monkeypatch.setattr(config, "ORIGINALS_KEY", "")
+    assert not cipher.enabled()
+    assert cipher.encrypt({"historico": "", "contraparte": "X"}) is None
+    assert cipher.decrypt(text) is None
 
 
-def test_chave_diferente_nao_abre_e_nao_quebra(monkeypatch):
-    texto = cipher.cifra({"historico": "", "contraparte": "X"})
-    monkeypatch.setattr(config, "CHAVE_ORIGINAIS", Fernet.generate_key().decode())
-    assert cipher.decifra(texto) is None
+def test_different_key_does_not_open_and_does_not_break(monkeypatch):
+    text = cipher.encrypt({"historico": "", "contraparte": "X"})
+    monkeypatch.setattr(config, "ORIGINALS_KEY", Fernet.generate_key().decode())
+    assert cipher.decrypt(text) is None
 
 
-def test_chave_mal_formada_e_erro_claro(monkeypatch):
-    monkeypatch.setattr(config, "CHAVE_ORIGINAIS", "nao-e-uma-chave")
-    with pytest.raises(cipher.ChaveInvalida, match="--nova-chave"):
-        cipher.cifra({"historico": "", "contraparte": "X"})
+def test_malformed_key_is_a_clear_error(monkeypatch):
+    monkeypatch.setattr(config, "ORIGINALS_KEY", "nao-e-uma-chave")
+    with pytest.raises(cipher.InvalidKey, match="--nova-chave"):
+        cipher.encrypt({"historico": "", "contraparte": "X"})
 
 
-# --- importação e aba Extrato ---
+# --- import and Extrato tab ---
 
-def test_importacao_devolve_original_e_grava_so_cifrado(db):
-    r = _envia()
+def test_import_returns_the_original_and_saves_it_only_encrypted(db):
+    r = _upload()
     assert r.status_code == 200
-    pix, cartao = r.json()["transacoes"]
+    pix, card = r.json()["transacoes"]
     assert (pix["contraparte"], pix["contraparte_original"]) == (INDIVIDUAL_PERSON, "ZEFERINO INVENTADO SILVA")
-    assert (cartao["contraparte"], cartao["contraparte_original"]) == ("IFOOD", "IFOOD *PIZZARIA IMAGINARIA")
-    assert "123.456" not in str(r.json())  # o CPF não entra nem no original
+    assert (card["contraparte"], card["contraparte_original"]) == ("IFOOD", "IFOOD *PIZZARIA IMAGINARIA")
+    assert "123.456" not in str(r.json())  # the CPF does not go in even in the original
 
-    gravadas = db.transactions(USUARIO.id)
-    assert {t["contraparte"] for t in gravadas} == {INDIVIDUAL_PERSON, "IFOOD"}
-    for t in gravadas:
+    saved = db.transactions(USER.id)
+    assert {t["contraparte"] for t in saved} == {INDIVIDUAL_PERSON, "IFOOD"}
+    for t in saved:
         assert t["original_cifrado"] and "ZEFERINO" not in t["original_cifrado"]
         assert "PIZZARIA" not in t["original_cifrado"]
         assert "contraparte_original" not in t and "historico_original" not in t
 
 
-def test_aba_extrato_mostra_o_original_decifrado():
-    _envia()
-    [cartao, pix] = TestClient(app).get("/api/transacoes").json()  # mais recente primeiro
+def test_extrato_tab_shows_the_decrypted_original():
+    _upload()
+    [card, pix] = TestClient(app).get("/api/transacoes").json()  # most recent first
     assert (pix["contraparte"], pix["contraparte_original"]) == (INDIVIDUAL_PERSON, "ZEFERINO INVENTADO SILVA")
-    assert cartao["contraparte_original"] == "IFOOD *PIZZARIA IMAGINARIA"
+    assert card["contraparte_original"] == "IFOOD *PIZZARIA IMAGINARIA"
     assert "original_cifrado" not in pix
 
 
-def test_outro_usuario_nao_ve_os_originais(logado_como):
-    _envia()
-    logado_como(OUTRO)
+def test_another_user_does_not_see_the_originals(logged_in_as):
+    _upload()
+    logged_in_as(OTHER_USER)
     assert TestClient(app).get("/api/transacoes").json() == []
 
 
-def test_sem_chave_importa_normal_e_extrato_mostra_o_anonimizado(db, monkeypatch):
-    monkeypatch.setattr(config, "CHAVE_ORIGINAIS", "")
-    r = _envia()
+def test_without_key_imports_normally_and_extrato_shows_the_anonymized_text(db, monkeypatch):
+    monkeypatch.setattr(config, "ORIGINALS_KEY", "")
+    r = _upload()
     assert r.status_code == 200
-    assert r.json()["transacoes"][0]["contraparte_original"] == "ZEFERINO INVENTADO SILVA"  # só na resposta
-    assert all(t["original_cifrado"] is None for t in db.transactions(USUARIO.id))
+    assert r.json()["transacoes"][0]["contraparte_original"] == "ZEFERINO INVENTADO SILVA"  # only in the response
+    assert all(t["original_cifrado"] is None for t in db.transactions(USER.id))
     pix = TestClient(app).get("/api/transacoes").json()[1]
     assert (pix["contraparte"], pix["contraparte_original"]) == (INDIVIDUAL_PERSON, None)
 
 
-def test_chave_mal_formada_na_importacao_da_500_sem_gravar(db, monkeypatch):
-    monkeypatch.setattr(config, "CHAVE_ORIGINAIS", "nao-e-uma-chave")
-    r = _envia()
+def test_malformed_key_on_import_gives_500_without_saving(db, monkeypatch):
+    monkeypatch.setattr(config, "ORIGINALS_KEY", "nao-e-uma-chave")
+    r = _upload()
     assert r.status_code == 500 and "CHAVE_ORIGINAIS" in r.json()["detail"]
-    assert db.transactions(USUARIO.id) == []
+    assert db.transactions(USER.id) == []
 
 
-def test_chat_e_ml_so_veem_o_anonimizado(db):
-    _envia()
-    df = queries.to_dataframe(db.transactions(USUARIO.id))
+def test_chat_and_ml_only_see_the_anonymized_text(db):
+    _upload()
+    df = queries.to_dataframe(db.transactions(USER.id))
     assert "original_cifrado" not in df.columns
     assert set(df["contraparte"]) == {INDIVIDUAL_PERSON, "IFOOD"}

@@ -2,7 +2,7 @@
 
 import re
 
-from api.schemas import Transacao
+from api.schemas import Transaction
 from database.migrate import list_migrations
 from statement.models import PaymentMethod, TransactionType
 from ml.classes import Category
@@ -32,7 +32,7 @@ def test_payment_methods_and_types_equal_to_the_parser():
 
 
 def test_origins_cover_the_api_ones_plus_user_correction():
-    from_api = set(Transacao.model_fields["origem_categoria"].annotation.__args__[0].__args__)
+    from_api = set(Transaction.model_fields["origem_categoria"].annotation.__args__[0].__args__)
     assert _check_values("origem_categoria") == from_api | {"usuario"}
 
 

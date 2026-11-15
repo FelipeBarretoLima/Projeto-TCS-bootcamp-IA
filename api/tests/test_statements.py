@@ -1,63 +1,63 @@
-"""Rota de upload com arquivos inventados (nenhum dado real)."""
+"""Upload route with made-up files (no real data)."""
 
 import pytest
 from fastapi.testclient import TestClient
 
 from api.main import app
 
-CAB = "Data,Valor,Identificador,Descrição\n"
+HEADER = "Data,Valor,Identificador,Descrição\n"
 U1 = "11111111-2222-4333-8444-555555555555"
 
-cliente = TestClient(app)
+client = TestClient(app)
 
 
-def _envia(nome: str, conteudo: bytes, **form: str):
-    return cliente.post("/api/extratos", files={"arquivo": (nome, conteudo)}, data=form)
+def _upload(name: str, content: bytes, **form: str):
+    return client.post("/api/extratos", files={"arquivo": (name, content)}, data=form)
 
 
-def test_csv_nubank_aceito_devolve_transacoes():
-    csv = f"{CAB}02/01/2024,-12.50,{U1},Compra no débito - PADARIA MODELO\n".encode()
-    r = _envia("meu extrato.csv", csv)
+def test_accepted_nubank_csv_returns_transactions():
+    csv = f"{HEADER}02/01/2024,-12.50,{U1},Compra no débito - PADARIA MODELO\n".encode()
+    r = _upload("meu extrato.csv", csv)
     assert r.status_code == 200
-    corpo = r.json()
-    assert corpo["relatorio"]["status"] == "aceito"
-    assert corpo["relatorio"]["parser"] == "nubank_conta_csv"
-    assert corpo["relatorio"]["linhas_gravadas"] == 1
-    [t] = corpo["transacoes"]
+    body = r.json()
+    assert body["relatorio"]["status"] == "aceito"
+    assert body["relatorio"]["parser"] == "nubank_conta_csv"
+    assert body["relatorio"]["linhas_gravadas"] == 1
+    [t] = body["transacoes"]
     assert t["data"] == "2024-01-02"
     assert t["valor"] == "-12.50"
     assert (t["tipo"], t["meio"], t["banco"]) == ("saida", "cartao_debito", "nubank")
     assert "id_usuario" not in t
 
 
-def test_arquivo_nao_reconhecido_vem_rejeitado():
-    r = _envia("planilha.csv", b"a,b,c\n1,2,3\n")
+def test_unrecognized_file_comes_back_rejected():
+    r = _upload("planilha.csv", b"a,b,c\n1,2,3\n")
     assert r.status_code == 200
-    corpo = r.json()
-    assert corpo["relatorio"]["status"] == "rejeitado"
-    assert corpo["relatorio"]["motivo"] == "FormatoNaoReconhecido"
-    assert corpo["transacoes"] == []
+    body = r.json()
+    assert body["relatorio"]["status"] == "rejeitado"
+    assert body["relatorio"]["motivo"] == "FormatoNaoReconhecido"
+    assert body["transacoes"] == []
 
 
-@pytest.mark.parametrize("nome", ["extrato.txt", "extrato", "extrato.xlsx"])
-def test_extensao_invalida(nome):
-    r = _envia(nome, b"qualquer coisa")
+@pytest.mark.parametrize("name", ["extrato.txt", "extrato", "extrato.xlsx"])
+def test_invalid_extension(name):
+    r = _upload(name, b"qualquer coisa")
     assert r.status_code == 400
     assert "formato" in r.json()["detail"]
 
 
-@pytest.mark.parametrize("usuario", ["07", "u7", "u123", "x01"])
-def test_usuario_invalido(usuario):
-    r = _envia("extrato.csv", b"x", usuario=usuario)
+@pytest.mark.parametrize("pseudonym", ["07", "u7", "u123", "x01"])
+def test_invalid_pseudonym(pseudonym):
+    r = _upload("extrato.csv", b"x", usuario=pseudonym)
     assert r.status_code == 400
 
 
-def test_arquivo_vazio():
-    assert _envia("extrato.pdf", b"").status_code == 400
+def test_empty_file():
+    assert _upload("extrato.pdf", b"").status_code == 400
 
 
-def test_arquivo_grande_demais(monkeypatch):
+def test_file_too_large(monkeypatch):
     from api.routes import statements
 
-    monkeypatch.setattr(statements, "TAMANHO_MAXIMO", 10)
-    assert _envia("extrato.csv", b"x" * 11).status_code == 400
+    monkeypatch.setattr(statements, "MAX_SIZE", 10)
+    assert _upload("extrato.csv", b"x" * 11).status_code == 400

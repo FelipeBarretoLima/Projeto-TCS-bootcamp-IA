@@ -20,9 +20,11 @@ exatamente como estão.
 
 O usuário retomou a tradução em 2026-11-15 (branch `refactor/english-database-agent-api`):
 - Feito: estrutura de pastas e arquivos (todos os módulos Python), pacote `statement`,
-  conteúdo de `extraction/`, `ml/`, `database/` (`Database`, `SaveResult`, `save_statement`...) e
-  `agent/` (`answer`, `Answer`, `queries.to_dataframe`, `queries.dashboard`...).
-- Em andamento: `api/`.
+  conteúdo de `extraction/`, `ml/`, `database/` (`Database`, `SaveResult`, `save_statement`...),
+  `agent/` (`answer`, `Answer`, `queries.to_dataframe`, `queries.dashboard`...) e `api/`
+  (`User`, `current_user`, `cipher.encrypt`, `config.MODEL_PATH`, classes Pydantic em inglês com
+  campos em português, parâmetros de rota com `alias`). **Tradução do Python concluída.**
+- Conferido com o OpenAPI antes/depois: rotas, parâmetros públicos e campos do JSON idênticos.
 - Em `database/`, os parâmetros com nome de coluna ficaram em português (`nome_arquivo`,
   `hash_arquivo`, `periodo_inicio`, `categoria`, e os de `finish_training`, que o retreino passa
   por `**registro` com chaves em texto).

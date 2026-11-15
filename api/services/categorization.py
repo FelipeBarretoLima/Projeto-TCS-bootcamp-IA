@@ -1,14 +1,14 @@
-"""Categoria de cada transação: entradas por regra, saídas pelo classificador (ML).
+"""Category of each transaction: inflows by rule, outflows by the classifier (ML).
 
-    1. entrada (dinheiro recebido)  -> "receitas"                  origem "regra"
-    2. saída                         -> classificador ml/modelos/*.pkl  origem "modelo"
+    1. inflow (money received)  -> "receitas"                       origin "regra"
+    2. outflow                  -> classifier ml/modelos/*.pkl      origin "modelo"
 
-As regras fixas e o mapa de estabelecimentos (ml.classes.by_rule, data/private) não entram aqui:
-eles só geram os rótulos do treino (python -m ml.label). O modelo aprendeu o que eles faziam.
-Medido no CSV rotulado, só nas saídas: ~99% de acerto em estabelecimento já visto, 100% em PIX
-para pessoa/tarifa/fatura e ~81% em estabelecimento nunca visto (validação cruzada por loja).
+The fixed rules and the merchant map (ml.classes.by_rule, data/private) do not come in here:
+they only produce the training labels (python -m ml.label). The model learned what they did.
+Measured on the labeled CSV, outflows only: ~99% accuracy on an already seen merchant, 100% on PIX
+to a person/fee/card bill and ~81% on a never seen merchant (cross-validation by store).
 
-Sem o .pkl, as saídas ficam sem categoria.
+Without the .pkl, the outflows stay uncategorized.
 """
 
 import logging
@@ -21,67 +21,67 @@ from statement.models import COLUMNS
 from ml.classes import Category
 
 from .. import config
-from ..schemas import ResultadoUpload, Transacao
+from ..schemas import Transaction, UploadResult
 
 log = logging.getLogger(__name__)
 
-# caminho -> (data de modificação, modelo): recarrega sozinho se o .pkl for treinado de novo
-_cache_modelo: dict[Path, tuple[float, object]] = {}
+# path -> (modification time, model): reloads by itself if the .pkl is trained again
+_model_cache: dict[Path, tuple[float, object]] = {}
 
 
-def carrega_modelo(caminho: Path):
-    """O classificador do .pkl, ou None se ele não existir ou não carregar."""
+def load_model(path: Path):
+    """The classifier from the .pkl, or None if it does not exist or does not load."""
     try:
-        modificado = caminho.stat().st_mtime
+        modified = path.stat().st_mtime
     except FileNotFoundError:
         return None
-    em_cache = _cache_modelo.get(caminho)
-    if em_cache is not None and em_cache[0] == modificado:
-        return em_cache[1]
+    cached = _model_cache.get(path)
+    if cached is not None and cached[0] == modified:
+        return cached[1]
     try:
-        modelo = joblib.load(caminho)
-    except Exception:  # versão diferente do scikit-learn, arquivo corrompido...
-        log.exception("não foi possível carregar o classificador %s; seguindo sem ele", caminho)
+        model = joblib.load(path)
+    except Exception:  # different scikit-learn version, corrupted file...
+        log.exception("não foi possível carregar o classificador %s; seguindo sem ele", path)
         return None
-    _cache_modelo[caminho] = (modificado, modelo)
-    return modelo
+    _model_cache[path] = (modified, model)
+    return model
 
 
-def _entrada_e_receita(t: Transacao) -> Transacao:
+def _income_by_rule(t: Transaction) -> Transaction:
     if t.tipo == "entrada":
         return t.model_copy(update={"categoria": Category.INCOME.value, "origem_categoria": "regra"})
     return t
 
 
-def _pelo_modelo(transacoes: list[Transacao], modelo) -> list[Transacao]:
-    """Classifica com o modelo as transações ainda sem categoria (as saídas)."""
-    pendentes = [i for i, t in enumerate(transacoes) if t.categoria is None]
-    if not pendentes:
-        return transacoes
-    # o .pkl recebe as colunas do CSV do parser; id_usuario e data são ignorados pelo modelo
-    linhas = []
-    for i in pendentes:
-        t = transacoes[i]
-        linha = t.model_dump(include=set(COLUMNS) - {"id_usuario"})
-        linha.update(id_usuario="", data=t.data.isoformat(), valor=float(t.valor))
-        linhas.append(linha)
-    previstas = modelo.predict(pd.DataFrame(linhas, columns=list(COLUMNS)))
-    resultado = list(transacoes)
-    for i, categoria in zip(pendentes, previstas):
-        resultado[i] = transacoes[i].model_copy(
-            update={"categoria": str(categoria), "origem_categoria": "modelo"}
+def _by_model(transactions: list[Transaction], model) -> list[Transaction]:
+    """Classifies with the model the transactions still uncategorized (the outflows)."""
+    pending = [i for i, t in enumerate(transactions) if t.categoria is None]
+    if not pending:
+        return transactions
+    # the .pkl receives the parser CSV columns; id_usuario and data are ignored by the model
+    rows = []
+    for i in pending:
+        t = transactions[i]
+        row = t.model_dump(include=set(COLUMNS) - {"id_usuario"})
+        row.update(id_usuario="", data=t.data.isoformat(), valor=float(t.valor))
+        rows.append(row)
+    predicted = model.predict(pd.DataFrame(rows, columns=list(COLUMNS)))
+    result = list(transactions)
+    for i, category in zip(pending, predicted):
+        result[i] = transactions[i].model_copy(
+            update={"categoria": str(category), "origem_categoria": "modelo"}
         )
-    return resultado
+    return result
 
 
-def categoriza(resultado: ResultadoUpload) -> ResultadoUpload:
-    transacoes = [_entrada_e_receita(t) for t in resultado.transacoes]
-    modelo = carrega_modelo(config.CAMINHO_MODELO)
-    if modelo is not None:
-        transacoes = _pelo_modelo(transacoes, modelo)
+def categorize(result: UploadResult) -> UploadResult:
+    transactions = [_income_by_rule(t) for t in result.transacoes]
+    model = load_model(config.MODEL_PATH)
+    if model is not None:
+        transactions = _by_model(transactions, model)
     else:
-        log.warning("classificador ausente (%s): as saídas ficam sem categoria", config.CAMINHO_MODELO)
-    return resultado.model_copy(update={
-        "transacoes": transacoes,
-        "sem_categoria": sum(t.categoria is None for t in transacoes),
+        log.warning("classificador ausente (%s): as saídas ficam sem categoria", config.MODEL_PATH)
+    return result.model_copy(update={
+        "transacoes": transactions,
+        "sem_categoria": sum(t.categoria is None for t in transactions),
     })

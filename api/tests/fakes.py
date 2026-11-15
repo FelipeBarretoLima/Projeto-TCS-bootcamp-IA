@@ -1,16 +1,16 @@
-"""Usuários e banco falsos para os testes da API (nenhum dado real, nenhuma conexão)."""
+"""Fake users and database for the API tests (no real data, no connection)."""
 
 from collections import Counter
 from datetime import datetime, timezone
 from itertools import count
 from uuid import UUID, uuid4
 
-from api.auth import Usuario
+from api.auth import User
 from database.deduplication import split_new_with_ids
 from database.repository import ConversationDeleted, DuplicateStatement, SaveResult
 
-USUARIO = Usuario(UUID("00000000-0000-4000-8000-000000000001"), "teste@exemplo.invalid", "Teste")
-OUTRO = Usuario(UUID("00000000-0000-4000-8000-000000000002"), "outro@exemplo.invalid", "Outro")
+USER = User(UUID("00000000-0000-4000-8000-000000000001"), "teste@exemplo.invalid", "Teste")
+OTHER_USER = User(UUID("00000000-0000-4000-8000-000000000002"), "outro@exemplo.invalid", "Outro")
 
 
 class FakeDatabase:
