@@ -5,7 +5,7 @@ from decimal import Decimal
 
 from fastapi.testclient import TestClient
 
-from agent.assistant import Resposta
+from agent.assistant import Answer
 from api.dependencies import modelo_do_assistente
 from api.rate_limit import Limite
 from api.main import app
@@ -89,7 +89,7 @@ def test_painel_de_um_mes_escolhido(db):
 
 def test_limite_de_perguntas_no_chat(monkeypatch):
     app.dependency_overrides[modelo_do_assistente] = lambda: object()
-    monkeypatch.setattr(rota_assistente, "responde", lambda *a, **k: Resposta("ok", None))
+    monkeypatch.setattr(rota_assistente, "answer", lambda *a, **k: Answer("ok", None))
     cliente = TestClient(app)
     respostas = [cliente.post("/api/chat", json={"mensagem": "oi"}).status_code for _ in range(11)]
     assert respostas[:10] == [200] * 10

@@ -47,8 +47,8 @@ def modelo_do_assistente():
     if not config.GEMINI_API_KEY:
         raise HTTPException(503, "assistente não configurado: preencha GEMINI_API_KEY no .env")
     if _modelo is None:
-        from agent.assistant import modelos_gemini
+        from agent.assistant import gemini_models
 
-        _modelo = modelos_gemini(config.GEMINI_API_KEY, config.GEMINI_MODEL, config.GEMINI_MODELOS_RESERVA,
-                                 config.GEMINI_TIMEOUT)
+        _modelo = gemini_models(config.GEMINI_API_KEY, config.GEMINI_MODEL, config.GEMINI_MODELOS_RESERVA,
+                                config.GEMINI_TIMEOUT)
     return _modelo

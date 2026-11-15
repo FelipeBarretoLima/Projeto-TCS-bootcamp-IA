@@ -6,7 +6,7 @@ from decimal import Decimal
 import pytest
 from fastapi.testclient import TestClient
 
-from agent.assistant import Resposta
+from agent.assistant import Answer
 from api.dependencies import modelo_do_assistente
 from api.main import app
 from api.routes import assistant as rota
@@ -23,10 +23,10 @@ def chamadas(monkeypatch):
 
     def responde_falso(modelo, df, pergunta, historico=()):
         feitas.append({"pergunta": pergunta, "historico": list(historico), "linhas": len(df)})
-        return Resposta(f"resposta para: {pergunta}", GRAFICO)
+        return Answer(f"resposta para: {pergunta}", GRAFICO)
 
     app.dependency_overrides[modelo_do_assistente] = lambda: object()
-    monkeypatch.setattr(rota, "responde", responde_falso)
+    monkeypatch.setattr(rota, "answer", responde_falso)
     return feitas
 
 
@@ -91,7 +91,7 @@ def test_erro_do_assistente_nao_grava_nada(db, monkeypatch):
         raise RuntimeError("Gemini fora do ar")
 
     app.dependency_overrides[modelo_do_assistente] = lambda: object()
-    monkeypatch.setattr(rota, "responde", quebra)
+    monkeypatch.setattr(rota, "answer", quebra)
     r = TestClient(app).post("/api/chat", json={"mensagem": "oi"})
     assert r.status_code == 502
     assert db.messages_ == []
@@ -109,9 +109,9 @@ def test_conversa_apagada_durante_a_resposta_da_404_sem_gravar(db, chamadas, mon
 
     def apaga_no_meio(modelo, df, pergunta, historico=()):
         db.delete_conversation(USUARIO.id, __import__("uuid").UUID(cid))  # outra aba apagou
-        return Resposta("tarde demais", None)
+        return Answer("tarde demais", None)
 
-    monkeypatch.setattr(rota, "responde", apaga_no_meio)
+    monkeypatch.setattr(rota, "answer", apaga_no_meio)
     r = cliente.post("/api/chat", json={"mensagem": "e agora?", "conversa_id": cid})
     assert r.status_code == 404 and "apagada" in r.json()["detail"]
 
@@ -140,11 +140,11 @@ def test_nenhuma_conexao_fica_aberta_enquanto_o_llm_responde(db, monkeypatch):
 
     def responde_conferindo(modelo, df, pergunta, historico=()):
         assert abertas == [], "havia uma conexão do banco aberta durante a chamada ao LLM"
-        return Resposta("ok", None)
+        return Answer("ok", None)
 
     app.dependency_overrides[abre_banco] = lambda: conta_conexoes
     app.dependency_overrides[modelo_do_assistente] = lambda: object()
-    monkeypatch.setattr(rota, "responde", responde_conferindo)
+    monkeypatch.setattr(rota, "answer", responde_conferindo)
     cliente = TestClient(app)
     cid = cliente.post("/api/chat", json={"mensagem": "oi"}).json()["conversa_id"]
     r = cliente.post("/api/chat", json={"mensagem": "e agora?", "conversa_id": cid})

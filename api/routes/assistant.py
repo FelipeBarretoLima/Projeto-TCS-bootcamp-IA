@@ -8,7 +8,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, Query, Response
 
 from agent import queries
-from agent.assistant import responde
+from agent.assistant import answer
 from database.repository import Database, ConversationDeleted
 
 from ..auth import Usuario, usuario_atual
@@ -31,7 +31,7 @@ def painel(
     """Cartões de um mês e receitas x despesas dos 6 meses até ele."""
     if mes is not None and not re.fullmatch(r"\d{4}-(0[1-9]|1[0-2])", mes):
         raise HTTPException(400, "mês inválido: use AAAA-MM (ex.: 2024-03)")
-    return Painel(**queries.painel(queries.tabela(db.transactions(usuario.id)), mes))
+    return Painel(**queries.dashboard(queries.to_dataframe(db.transactions(usuario.id)), mes))
 
 
 @router.get("/conversas")
@@ -95,11 +95,11 @@ def chat(
             if not db.conversation_belongs_to_user(usuario.id, pergunta.conversa_id):
                 raise HTTPException(404, "conversa não encontrada")
             historico = db.messages(pergunta.conversa_id)
-        df = queries.tabela(db.transactions(usuario.id))
+        df = queries.to_dataframe(db.transactions(usuario.id))
 
     # 2) o LLM, sem nenhuma conexão aberta
     try:
-        resposta = responde(modelo, df, texto, historico)
+        resposta = answer(modelo, df, texto, historico)
     except Exception:
         # nada foi gravado ainda: o usuário pode tentar de novo
         log.exception("falha no assistente")
@@ -115,7 +115,7 @@ def chat(
             conversa_id = pergunta.conversa_id
         try:
             m_pergunta = db.save_message(conversa_id, "usuario", texto)
-            m_resposta = db.save_message(conversa_id, "agente", resposta.texto, resposta.grafico)
+            m_resposta = db.save_message(conversa_id, "agente", resposta.text, resposta.chart)
         except ConversationDeleted:
             raise HTTPException(404, "a conversa foi apagada enquanto o assistente respondia") from None
     return RespostaChat(conversa_id=conversa_id, pergunta=Mensagem(**m_pergunta), resposta=Mensagem(**m_resposta))

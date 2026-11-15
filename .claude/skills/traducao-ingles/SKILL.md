@@ -20,8 +20,9 @@ exatamente como estão.
 
 O usuário retomou a tradução em 2026-11-15 (branch `refactor/english-database-agent-api`):
 - Feito: estrutura de pastas e arquivos (todos os módulos Python), pacote `statement`,
-  conteúdo de `extraction/`, `ml/` e `database/` (`Database`, `SaveResult`, `save_statement`...).
-- Em andamento: `agent/`, depois `api/`.
+  conteúdo de `extraction/`, `ml/`, `database/` (`Database`, `SaveResult`, `save_statement`...) e
+  `agent/` (`answer`, `Answer`, `queries.to_dataframe`, `queries.dashboard`...).
+- Em andamento: `api/`.
 - Em `database/`, os parâmetros com nome de coluna ficaram em português (`nome_arquivo`,
   `hash_arquivo`, `periodo_inicio`, `categoria`, e os de `finish_training`, que o retreino passa
   por `**registro` com chaves em texto).
@@ -111,9 +112,10 @@ O usuário retomou a tradução em 2026-11-15 (branch `refactor/english-database
    `from agent import queries` → `queries.tabela(...)`): renomear o módulo exige trocar os usos
    no arquivo. Cuidado com nomes iguais que são variáveis (`limite = Limite(...)`) ou atributos
    (`self.extratos`).
-4. **Prompt do agente** (`agent/assistant.py`): o texto cita as ferramentas pelo nome
-   (`gastos_por_categoria`, `gastos_mensais`, `resumo_do_mes`...). Renomeie as funções `@tool` e
-   o prompt juntos.
+4. **O que o Gemini lê** (`agent/assistant.py`): decisão do usuário, fica em português: o prompt
+   (`INSTRUCTIONS`), os nomes das ferramentas (fixados em `@tool("gastos_mensais")`), os
+   parâmetros delas (`meses`, `de`, `ate`, `quantidade`, `ano`, `mes`) e as docstrings das
+   ferramentas (viram a descrição). Só a função Python por trás tem nome em inglês.
 5. **Comandos documentados**: `python -m statement`, `python -m ml.label`, `python -m ml.train`,
    `python -m database.migrate`, `python -m api.retrain`, `python -m api.cipher`,
    `uvicorn api.main:app`. Se um módulo mudar de nome, atualize README.md, `ml/README.md`,

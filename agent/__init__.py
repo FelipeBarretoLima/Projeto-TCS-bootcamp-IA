@@ -1,1 +1,1 @@
-"""Assistente TAS: pergunta do usuário -> consulta fixa (pandas) -> texto + gráfico."""
+"""TAS assistant: user question -> fixed query (pandas) -> text + chart."""

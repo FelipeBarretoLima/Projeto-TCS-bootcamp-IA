@@ -103,6 +103,6 @@ def test_chave_mal_formada_na_importacao_da_500_sem_gravar(db, monkeypatch):
 
 def test_chat_e_ml_so_veem_o_anonimizado(db):
     _envia()
-    df = queries.tabela(db.transactions(USUARIO.id))
+    df = queries.to_dataframe(db.transactions(USUARIO.id))
     assert "original_cifrado" not in df.columns
     assert set(df["contraparte"]) == {INDIVIDUAL_PERSON, "IFOOD"}

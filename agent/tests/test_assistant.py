@@ -1,95 +1,95 @@
-"""Ferramentas do agente (sem chamar o Gemini)."""
+"""Agent tools (without calling Gemini)."""
 
 from datetime import date
 
 from agent import queries
-from agent.assistant import ferramentas, historico_para_mensagens
+from agent.assistant import build_tools, history_to_messages
 
 
 def _df():
-    return queries.tabela([{"data": date(2024, 1, 5), "valor": -50, "tipo": "saida", "categoria": "transporte",
-                              "contraparte": "POSTO X", "meio": "cartao_debito", "banco": "b"}])
+    return queries.to_dataframe([{"data": date(2024, 1, 5), "valor": -50, "tipo": "saida", "categoria": "transporte",
+                                  "contraparte": "POSTO X", "meio": "cartao_debito", "banco": "b"}])
 
 
-def test_ferramentas_devolvem_so_totais_e_guardam_o_grafico():
-    graficos = []
-    por_nome = {f.name: f for f in ferramentas(_df(), graficos)}
-    assert set(por_nome) == {"gastos_mensais", "gastos_por_categoria", "receitas_x_despesas", "evolucao_saldo",
-                             "maiores_gastos", "gastos_por_estabelecimento", "resumo_do_mes", "periodo_disponivel"}
-    dados = por_nome["gastos_mensais"].invoke({"meses": 1, "categoria": "transporte"})
-    assert dados["total"] == 50.0 and "grafico" not in dados
-    assert graficos[-1]["titulo"].startswith("Transporte por mês")
+def test_tools_return_only_totals_and_keep_the_chart():
+    charts = []
+    by_name = {f.name: f for f in build_tools(_df(), charts)}
+    assert set(by_name) == {"gastos_mensais", "gastos_por_categoria", "receitas_x_despesas", "evolucao_saldo",
+                            "maiores_gastos", "gastos_por_estabelecimento", "resumo_do_mes", "periodo_disponivel"}
+    data = by_name["gastos_mensais"].invoke({"meses": 1, "categoria": "transporte"})
+    assert data["total"] == 50.0 and "grafico" not in data
+    assert charts[-1]["titulo"].startswith("Transporte por mês")
 
 
-def test_categoria_da_ferramenta_so_aceita_as_8_classes():
-    schema = str({f.name: f for f in ferramentas(_df(), [])}["gastos_mensais"].args["categoria"])
-    for c in queries.CATEGORIAS:
+def test_tool_category_only_accepts_the_8_classes():
+    schema = str({f.name: f for f in build_tools(_df(), [])}["gastos_mensais"].args["categoria"])
+    for c in queries.CATEGORIES:
         assert c in schema
     assert "lazer" not in schema
 
 
-def test_historico_vira_mensagens_so_com_o_texto():
-    msgs = historico_para_mensagens([
+def test_history_becomes_messages_with_text_only():
+    msgs = history_to_messages([
         {"papel": "usuario", "texto": "quanto gastei?"},
         {"papel": "agente", "texto": "R$ 50,00", "grafico": {"titulo": "Gastos por mês"}},
     ])
     assert [(m.type, m.content) for m in msgs] == [("human", "quanto gastei?"), ("ai", "R$ 50,00")]
 
 
-def test_resposta_sem_nota_de_grafico_inventada():
-    from agent.assistant import _limpa
+def test_answer_without_made_up_chart_note():
+    from agent.assistant import _clean
 
-    assert _limpa("Saldo de R$ 10,00.\n\n[gráfico mostrado: Receitas x despesas]") == "Saldo de R$ 10,00."
-    assert _limpa("Gastou R$ 5,00 [Gráfico: barras] no mês.") == "Gastou R$ 5,00\nno mês."
+    assert _clean("Saldo de R$ 10,00.\n\n[gráfico mostrado: Receitas x despesas]") == "Saldo de R$ 10,00."
+    assert _clean("Gastou R$ 5,00 [Gráfico: barras] no mês.") == "Gastou R$ 5,00\nno mês."
 
 
-def test_ferramenta_aceita_periodo_e_devolve_erro_ao_modelo_em_vez_de_quebrar():
-    graficos = []
-    por_nome = {f.name: f for f in ferramentas(_df(), graficos)}
-    ok = por_nome["gastos_mensais"].invoke({"de": "2024-01", "ate": "2024-12"})
+def test_tool_accepts_period_and_returns_error_to_the_model_instead_of_breaking():
+    charts = []
+    by_name = {f.name: f for f in build_tools(_df(), charts)}
+    ok = by_name["gastos_mensais"].invoke({"de": "2024-01", "ate": "2024-12"})
     assert ok["total"] == 50.0 and ok["periodo"] == "jan/24 a dez/24"
-    erro = por_nome["gastos_mensais"].invoke({"de": "janeiro"})
-    assert "AAAA-MM" in erro["erro"] and len(graficos) == 1  # o erro não gera gráfico
+    error = by_name["gastos_mensais"].invoke({"de": "janeiro"})
+    assert "AAAA-MM" in error["erro"] and len(charts) == 1  # the error produces no chart
 
 
-def test_instrucoes_recebem_o_periodo_dos_extratos():
-    from agent.assistant import contexto_dos_dados
+def test_instructions_receive_the_statements_period():
+    from agent.assistant import data_context
 
-    assert contexto_dos_dados(_df()) == "\nExtratos enviados: de 05/01/2024 a 05/01/2024 (1 transação)."
-    assert "nenhum" in contexto_dos_dados(queries.tabela([]))
-
-
-def test_pizza_tem_prioridade_quando_o_agente_gera_mais_de_um_grafico():
-    from agent.assistant import escolhe_grafico
-
-    barras = {"tipo": "barras", "titulo": "Gastos por mês"}
-    pizza = {"tipo": "pizza", "titulo": "Gastos por categoria"}
-    assert escolhe_grafico([pizza, barras]) is pizza
-    assert escolhe_grafico([barras]) is barras
-    assert escolhe_grafico([]) is None
+    assert data_context(_df()) == "\nExtratos enviados: de 05/01/2024 a 05/01/2024 (1 transação)."
+    assert "nenhum" in data_context(queries.to_dataframe([]))
 
 
-def test_ferramenta_de_categorias_gera_pizza():
-    graficos = []
-    por_nome = {f.name: f for f in ferramentas(_df(), graficos)}
-    por_nome["gastos_por_categoria"].invoke({"meses": 1})
-    assert graficos[-1]["tipo"] == "pizza"
-    assert "pizza" in por_nome["gastos_por_categoria"].description
+def test_pie_has_priority_when_the_agent_produces_more_than_one_chart():
+    from agent.assistant import pick_chart
+
+    bars = {"tipo": "barras", "titulo": "Gastos por mês"}
+    pie = {"tipo": "pizza", "titulo": "Gastos por categoria"}
+    assert pick_chart([pie, bars]) is pie
+    assert pick_chart([bars]) is bars
+    assert pick_chart([]) is None
 
 
-# --- modelo reserva (sem chamar o Gemini) ---
+def test_category_tool_produces_pie():
+    charts = []
+    by_name = {f.name: f for f in build_tools(_df(), charts)}
+    by_name["gastos_por_categoria"].invoke({"meses": 1})
+    assert charts[-1]["tipo"] == "pizza"
+    assert "pizza" in by_name["gastos_por_categoria"].description
+
+
+# --- fallback model (without calling Gemini) ---
 
 from langchain_core.language_models.chat_models import BaseChatModel  # noqa: E402
 from langchain_core.messages import AIMessage  # noqa: E402
 from langchain_core.outputs import ChatGeneration, ChatResult  # noqa: E402
 
 
-class _ModeloFalso(BaseChatModel):
-    """Responde um texto fixo, ou falha como o Gemini sobrecarregado."""
+class _FakeModel(BaseChatModel):
+    """Answers a fixed text, or fails like an overloaded Gemini."""
 
-    texto: str = ""
-    falha: bool = False
-    chamadas: int = 0
+    text: str = ""
+    fails: bool = False
+    calls: int = 0
 
     @property
     def _llm_type(self) -> str:
@@ -99,35 +99,35 @@ class _ModeloFalso(BaseChatModel):
         return self
 
     def _generate(self, messages, stop=None, run_manager=None, **kwargs):
-        self.chamadas += 1
-        if self.falha:
+        self.calls += 1
+        if self.fails:
             raise RuntimeError("503 UNAVAILABLE: This model is currently experiencing high demand")
-        return ChatResult(generations=[ChatGeneration(message=AIMessage(self.texto))])
+        return ChatResult(generations=[ChatGeneration(message=AIMessage(self.text))])
 
 
-def test_principal_sobrecarregado_passa_para_o_reserva():
-    from agent.assistant import Modelos, responde
+def test_overloaded_primary_falls_back():
+    from agent.assistant import Models, answer
 
-    principal, reserva = _ModeloFalso(falha=True), _ModeloFalso(texto="Resposta do reserva.")
-    r = responde(Modelos(principal, (reserva,)), _df(), "oi")
-    assert r.texto == "Resposta do reserva."
-    assert principal.chamadas == 1 and reserva.chamadas == 1  # sem repetir o principal
+    primary, fallback = _FakeModel(fails=True), _FakeModel(text="Resposta do reserva.")
+    r = answer(Models(primary, (fallback,)), _df(), "oi")
+    assert r.text == "Resposta do reserva."
+    assert primary.calls == 1 and fallback.calls == 1  # without repeating the primary
 
 
-def test_sem_reserva_o_erro_do_principal_sobe():
+def test_without_fallback_the_primary_error_is_raised():
     import pytest
 
-    from agent.assistant import Modelos, responde
+    from agent.assistant import Models, answer
 
     with pytest.raises(RuntimeError, match="503"):
-        responde(Modelos(_ModeloFalso(falha=True)), _df(), "oi")
+        answer(Models(_FakeModel(fails=True)), _df(), "oi")
 
 
-def test_lista_de_modelos_nao_repete_o_principal():
-    from agent.assistant import modelos_gemini
+def test_model_list_does_not_repeat_the_primary():
+    from agent.assistant import gemini_models
 
-    m = modelos_gemini("chave-falsa", "gemini-3.5-flash-lite",
-                       ["gemini-3.6-flash", "gemini-3.5-flash-lite", "gemini-3.6-flash"], timeout=7)
-    assert m.principal.model.endswith("gemini-3.5-flash-lite")
-    assert [r.model.split("/")[-1] for r in m.reservas] == ["gemini-3.6-flash"]
-    assert m.principal.max_retries == 0 and m.principal.timeout == 7
+    m = gemini_models("chave-falsa", "gemini-3.5-flash-lite",
+                      ["gemini-3.6-flash", "gemini-3.5-flash-lite", "gemini-3.6-flash"], timeout=7)
+    assert m.primary.model.endswith("gemini-3.5-flash-lite")
+    assert [r.model.split("/")[-1] for r in m.fallbacks] == ["gemini-3.6-flash"]
+    assert m.primary.max_retries == 0 and m.primary.timeout == 7
