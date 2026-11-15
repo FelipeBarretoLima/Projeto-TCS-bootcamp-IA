@@ -31,7 +31,7 @@ def chamadas(monkeypatch):
 
 
 def _transacao(db, data, valor, tipo, categoria, usuario=USUARIO):
-    db.linhas.append({"usuario_id": usuario.id, "extrato_id": None, "data": data, "historico": "X",
+    db.rows.append({"usuario_id": usuario.id, "extrato_id": None, "data": data, "historico": "X",
                       "contraparte": "LOJA", "valor": Decimal(valor), "tipo": tipo, "meio": "pix",
                       "banco": "nubank", "categoria": categoria, "origem_categoria": "regra"})
 
@@ -94,7 +94,7 @@ def test_erro_do_assistente_nao_grava_nada(db, monkeypatch):
     monkeypatch.setattr(rota, "responde", quebra)
     r = TestClient(app).post("/api/chat", json={"mensagem": "oi"})
     assert r.status_code == 502
-    assert db.mensagens_ == []
+    assert db.messages_ == []
 
 
 def test_mensagem_vazia_da_422_ou_400(chamadas):
@@ -108,7 +108,7 @@ def test_conversa_apagada_durante_a_resposta_da_404_sem_gravar(db, chamadas, mon
     cid = cliente.post("/api/chat", json={"mensagem": "oi"}).json()["conversa_id"]
 
     def apaga_no_meio(modelo, df, pergunta, historico=()):
-        db.apaga_conversa(USUARIO.id, __import__("uuid").UUID(cid))  # outra aba apagou
+        db.delete_conversation(USUARIO.id, __import__("uuid").UUID(cid))  # outra aba apagou
         return Resposta("tarde demais", None)
 
     monkeypatch.setattr(rota, "responde", apaga_no_meio)
@@ -148,4 +148,4 @@ def test_nenhuma_conexao_fica_aberta_enquanto_o_llm_responde(db, monkeypatch):
     cliente = TestClient(app)
     cid = cliente.post("/api/chat", json={"mensagem": "oi"}).json()["conversa_id"]
     r = cliente.post("/api/chat", json={"mensagem": "e agora?", "conversa_id": cid})
-    assert r.status_code == 200 and len(db.mensagens_) == 4
+    assert r.status_code == 200 and len(db.messages_) == 4

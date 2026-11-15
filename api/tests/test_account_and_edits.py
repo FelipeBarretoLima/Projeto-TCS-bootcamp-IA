@@ -31,10 +31,10 @@ def test_corrigir_categoria_vale_so_para_o_dono(db, logado_como):
     assert cliente.patch(f"/api/transacoes/{t['id']}", json={"categoria": "lazer"}).status_code == 400
     assert cliente.patch(f"/api/transacoes/{t['id']}", json={"categoria": "mercado"}).status_code == 204
     assert cliente.get("/api/transacoes").json()[0]["categoria"] == "mercado"
-    assert db.linhas[0]["origem_categoria"] == "usuario"
+    assert db.rows[0]["origem_categoria"] == "usuario"
 
     assert cliente.patch(f"/api/transacoes/{t['id']}", json={"categoria": None}).status_code == 204
-    assert db.linhas[0]["categoria"] is None and db.linhas[0]["origem_categoria"] is None
+    assert db.rows[0]["categoria"] is None and db.rows[0]["origem_categoria"] is None
 
     logado_como(OUTRO)
     assert cliente.patch(f"/api/transacoes/{t['id']}", json={"categoria": "mercado"}).status_code == 404
@@ -42,7 +42,7 @@ def test_corrigir_categoria_vale_so_para_o_dono(db, logado_como):
 
 def test_renomear_conversa(db, logado_como):
     cliente = TestClient(app)
-    cid = db.cria_conversa(USUARIO.id, "antigo")
+    cid = db.create_conversation(USUARIO.id, "antigo")
     assert cliente.patch(f"/api/conversas/{cid}", json={"titulo": "   "}).status_code == 400
     assert cliente.patch(f"/api/conversas/{cid}", json={"titulo": " Gastos de março "}).status_code == 204
     assert cliente.get("/api/conversas").json()[0]["titulo"] == "Gastos de março"
@@ -54,28 +54,28 @@ def test_mudar_nome_do_perfil(db):
     cliente = TestClient(app)
     r = cliente.patch("/api/perfil", json={"nome": " Maria "})
     assert r.status_code == 200 and r.json() == {"nome": "Maria", "email": USUARIO.email}
-    assert db.usuarios[USUARIO.id]["nome"] == "Maria"
+    assert db.users[USUARIO.id]["nome"] == "Maria"
     assert cliente.patch("/api/perfil", json={"nome": "  "}).status_code == 400
 
 
 def test_excluir_conta_apaga_tudo_do_usuario_e_nada_dos_outros(db, logado_como):
     cliente = TestClient(app)
     _importa(cliente, [("02/01/2024", "-12.50")])
-    db.cria_conversa(USUARIO.id, "minha")
+    db.create_conversation(USUARIO.id, "minha")
     logado_como(OUTRO)
     _importa(cliente, [("03/01/2024", "-1.00")])
     logado_como(USUARIO)
 
     assert cliente.delete("/api/conta").status_code == 204
-    assert db.transacoes(USUARIO.id) == [] and db.lista_extratos(USUARIO.id) == []
-    assert db.lista_conversas(USUARIO.id) == []
-    assert len(db.transacoes(OUTRO.id)) == 1
+    assert db.transactions(USUARIO.id) == [] and db.list_statements(USUARIO.id) == []
+    assert db.list_conversations(USUARIO.id) == []
+    assert len(db.transactions(OUTRO.id)) == 1
 
 
 def test_painel_de_um_mes_escolhido(db):
     cliente = TestClient(app)
     for dia, valor in ((date(2024, 1, 5), "-100.00"), (date(2024, 3, 5), "-30.00")):
-        db.linhas.append({"usuario_id": USUARIO.id, "extrato_id": None, "data": dia, "historico": "X",
+        db.rows.append({"usuario_id": USUARIO.id, "extrato_id": None, "data": dia, "historico": "X",
                           "contraparte": "LOJA", "valor": Decimal(valor), "tipo": "saida", "meio": "pix",
                           "banco": "b", "categoria": "compras", "origem_categoria": "regra"})
     padrao = cliente.get("/api/painel").json()

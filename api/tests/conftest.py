@@ -7,7 +7,7 @@ from api.auth import usuario_atual
 from api.dependencies import abre_banco, banco
 from api.rate_limit import LIMITE_CHAT, LIMITE_IMPORTACAO
 from api.main import app
-from api.tests.fakes import USUARIO, BancoFalso
+from api.tests.fakes import USUARIO, FakeDatabase
 
 
 @pytest.fixture(autouse=True)
@@ -41,7 +41,7 @@ def db():
     """Banco em memória e um usuário logado em todas as rotas."""
     from contextlib import nullcontext
 
-    falso = BancoFalso()
+    falso = FakeDatabase()
     app.dependency_overrides[banco] = lambda: falso
     app.dependency_overrides[abre_banco] = lambda: (lambda: nullcontext(falso))
     app.dependency_overrides[usuario_atual] = lambda: USUARIO

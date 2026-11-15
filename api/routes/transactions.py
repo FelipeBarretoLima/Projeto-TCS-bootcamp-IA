@@ -5,7 +5,7 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Path, Query, Response
 
-from database.repository import Banco
+from database.repository import Database
 from ml.classes import Category
 
 from .. import cipher
@@ -34,9 +34,9 @@ def inicio_da_janela(ultima: date, meses: int = MESES_PADRAO) -> date:
 
 @router.get("/transacoes/periodo")
 def periodo(
-    usuario: Annotated[Usuario, Depends(usuario_atual)], db: Annotated[Banco, Depends(banco)]
+    usuario: Annotated[Usuario, Depends(usuario_atual)], db: Annotated[Database, Depends(banco)]
 ) -> PeriodoTransacoes:
-    primeira, ultima = db.periodo_transacoes(usuario.id)
+    primeira, ultima = db.transaction_period(usuario.id)
     if ultima is None:
         return PeriodoTransacoes(primeira=None, ultima=None, padrao_inicio=None, padrao_fim=None)
     return PeriodoTransacoes(primeira=primeira, ultima=ultima,
@@ -46,7 +46,7 @@ def periodo(
 @router.get("/transacoes")
 def lista_transacoes(
     usuario: Annotated[Usuario, Depends(usuario_atual)],
-    db: Annotated[Banco, Depends(banco)],
+    db: Annotated[Database, Depends(banco)],
     inicio: Annotated[date | None, Query(description="Data inicial (inclusiva), AAAA-MM-DD")] = None,
     fim: Annotated[date | None, Query(description="Data final (inclusiva), AAAA-MM-DD")] = None,
     categoria: Annotated[str | None, Query(description="Uma das categorias ou 'sem_categoria'")] = None,
@@ -56,12 +56,12 @@ def lista_transacoes(
     validas = {c.value for c in Category}
     if categoria is not None and categoria != SEM_CATEGORIA and categoria not in validas:
         raise HTTPException(400, "categoria inválida")
-    linhas = db.busca_transacoes(
+    linhas = db.find_transactions(
         usuario.id,
-        inicio=inicio,
-        fim=fim,
+        start=inicio,
+        end=fim,
         categoria=categoria if categoria in validas else None,
-        sem_categoria=categoria == SEM_CATEGORIA,
+        uncategorized=categoria == SEM_CATEGORIA,
     )
     try:
         return [_com_original(t) for t in linhas]
@@ -81,7 +81,7 @@ def muda_categoria(
     transacao_id: Annotated[int, Path(ge=1, le=ID_MAXIMO)],
     nova: NovaCategoria,
     usuario: Annotated[Usuario, Depends(usuario_atual)],
-    db: Annotated[Banco, Depends(banco)],
+    db: Annotated[Database, Depends(banco)],
 ) -> Response:
     """O usuário corrige a categoria (vale para o dashboard e o assistente). None = sem categoria.
 
@@ -90,9 +90,9 @@ def muda_categoria(
     """
     if nova.categoria is not None and nova.categoria not in {c.value for c in Category}:
         raise HTTPException(400, "categoria inválida")
-    if not db.muda_categoria(usuario.id, transacao_id, nova.categoria):
+    if not db.set_category(usuario.id, transacao_id, nova.categoria):
         raise HTTPException(404, "transação não encontrada")
     # grava já: o retreino roda noutra conexão e precisa ver esta correção
-    db.confirma()
+    db.commit()
     retraining.dispara_se_preciso(db)
     return Response(status_code=204)

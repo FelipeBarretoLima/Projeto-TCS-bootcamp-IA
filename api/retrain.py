@@ -12,7 +12,7 @@ from .services import retraining
 def main(argv: list[str]) -> int:
     if argv == ["--historico"]:
         with retraining.abre_banco() as db:
-            for t in db.treinos():
+            for t in db.trainings():
                 print(f"{t['iniciado_em']:%d/%m/%Y %H:%M}  {t['status']:7} correções={t['correcoes']:4} "
                       f"acerto nas correções: {t['acerto_correcoes_antes']}% -> {t['acerto_correcoes_depois']}% "
                       f"| base {t['acerto_base_depois']}%  {t['mensagem']}")

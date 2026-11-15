@@ -7,25 +7,25 @@ from contextlib import AbstractContextManager, contextmanager
 
 from fastapi import HTTPException
 
-from database.connection import BancoNaoConfigurado, conexao
-from database.repository import Banco
+from database.connection import DatabaseNotConfigured, connect
+from database.repository import Database
 
 from . import config
 
-AbreBanco = Callable[[], AbstractContextManager[Banco]]
+AbreBanco = Callable[[], AbstractContextManager[Database]]
 
 
 @contextmanager
-def transacao_curta() -> Iterator[Banco]:
+def transacao_curta() -> Iterator[Database]:
     """Uma transação aberta só pelo tempo do bloco `with`: deu erro, nada fica gravado."""
     try:
-        with conexao(config.DATABASE_URL) as con:
-            yield Banco(con)
-    except BancoNaoConfigurado:
+        with connect(config.DATABASE_URL) as con:
+            yield Database(con)
+    except DatabaseNotConfigured:
         raise HTTPException(503, "banco não configurado: preencha DATABASE_URL no .env") from None
 
 
-def banco() -> Iterator[Banco]:
+def banco() -> Iterator[Database]:
     """Uma transação por requisição (a conexão fica presa até a resposta sair)."""
     with transacao_curta() as db:
         yield db

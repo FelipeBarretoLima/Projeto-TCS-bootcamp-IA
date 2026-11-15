@@ -19,12 +19,12 @@ def _t(dia, categoria, valor="-10.00", mes=1):
 
 @pytest.fixture
 def com_transacoes(db):
-    db.grava_extrato(USUARIO.id, nome_arquivo="jan.csv", hash_arquivo="a", parser="nubank_csv",
-                     periodo_inicio=None, periodo_fim=None,
-                     transacoes=[_t(5, "mercado", "-50.00"), _t(10, "transporte", "-20.00"),
-                                 _t(20, None, "-5.00"), _t(3, "mercado", "-30.00", mes=2)])
-    db.grava_extrato(OUTRO.id, nome_arquivo="outro.csv", hash_arquivo="b", parser="nubank_csv",
-                     periodo_inicio=None, periodo_fim=None, transacoes=[_t(7, "mercado", "-99.00")])
+    db.save_statement(USUARIO.id, nome_arquivo="jan.csv", hash_arquivo="a", parser="nubank_csv",
+                      periodo_inicio=None, periodo_fim=None,
+                      transactions=[_t(5, "mercado", "-50.00"), _t(10, "transporte", "-20.00"),
+                                    _t(20, None, "-5.00"), _t(3, "mercado", "-30.00", mes=2)])
+    db.save_statement(OUTRO.id, nome_arquivo="outro.csv", hash_arquivo="b", parser="nubank_csv",
+                      periodo_inicio=None, periodo_fim=None, transactions=[_t(7, "mercado", "-99.00")])
     return db
 
 
@@ -102,8 +102,8 @@ def test_periodo_sem_transacoes():
 
 
 def test_periodo_padrao_sao_os_6_meses_ate_a_ultima_transacao(db):
-    db.grava_extrato(USUARIO.id, nome_arquivo="a.csv", hash_arquivo="a", parser="p", periodo_inicio=None,
-                     periodo_fim=None, transacoes=[_t(10, None, mes=1), _t(20, None, mes=12)])
+    db.save_statement(USUARIO.id, nome_arquivo="a.csv", hash_arquivo="a", parser="p", periodo_inicio=None,
+                      periodo_fim=None, transactions=[_t(10, None, mes=1), _t(20, None, mes=12)])
     assert TestClient(app).get("/api/transacoes/periodo").json() == {
         "primeira": "2024-01-10", "ultima": "2024-12-20",
         "padrao_inicio": "2024-07-01", "padrao_fim": "2024-12-20"}

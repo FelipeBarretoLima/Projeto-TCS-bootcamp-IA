@@ -17,7 +17,7 @@ def _sem_login():
 def test_corpo_grande_com_content_length_e_recusado_sem_login(db):
     r = _sem_login().post("/api/extratos", files={"arquivo": ("e.csv", b"x" * GRANDE, "text/csv")})
     assert r.status_code == 413 and r.json()["detail"] == "arquivo maior que 10 MB"
-    assert db.extratos == {}
+    assert db.statements == {}
 
 
 def test_corpo_grande_enviado_em_pedacos_e_recusado(db):
@@ -28,7 +28,7 @@ def test_corpo_grande_enviado_em_pedacos_e_recusado(db):
     r = _sem_login().post("/api/extratos", content=pedacos(),
                           headers={"content-type": "multipart/form-data; boundary=abc"})
     assert r.status_code == 413
-    assert db.extratos == {}
+    assert db.statements == {}
 
 
 def test_corpo_normal_continua_passando():

@@ -14,7 +14,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
-from database.connection import fecha
+from database.connection import close_pool
 
 from . import config
 from .routes import assistant, account, statements, health, transactions
@@ -23,7 +23,7 @@ from .routes import assistant, account, statements, health, transactions
 @asynccontextmanager
 async def ciclo_de_vida(_app: FastAPI):
     yield
-    fecha()  # fecha o pool de conexões ao desligar
+    close_pool()  # fecha o pool de conexões ao desligar
 
 
 app = FastAPI(title="Projeto TCS – Extratos", version="0.3.0", lifespan=ciclo_de_vida)

@@ -1,4 +1,4 @@
-"""Pool de conexões com o banco (aberto na primeira vez que a API precisa dele)."""
+"""Database connection pool (opened the first time the API needs it)."""
 
 from __future__ import annotations
 
@@ -10,38 +10,38 @@ import psycopg
 from psycopg_pool import ConnectionPool
 
 _pool: ConnectionPool | None = None
-_trava_pool = threading.Lock()
+_pool_lock = threading.Lock()
 
 
-class BancoNaoConfigurado(Exception):
-    """DATABASE_URL vazio no .env."""
+class DatabaseNotConfigured(Exception):
+    """DATABASE_URL is empty in .env."""
 
 
-def _abre(url: str) -> ConnectionPool:
-    # prepare_threshold=None: sem prepared statements, que o pooler do Supabase pode não aceitar
+def _open_pool(url: str) -> ConnectionPool:
+    # prepare_threshold=None: no prepared statements, which the Supabase pooler may not accept
     return ConnectionPool(url, min_size=1, max_size=5, open=True, timeout=15,
                           kwargs={"prepare_threshold": None, "connect_timeout": 10})
 
 
 @contextmanager
-def conexao(url: str) -> Iterator[psycopg.Connection]:
-    """Uma conexão do pool. Sai sem erro: commit. Sai com erro: rollback (nada fica pela metade)."""
+def connect(url: str) -> Iterator[psycopg.Connection]:
+    """A connection from the pool. Exits without error: commit. Exits with error: rollback (nothing half-done)."""
     global _pool
     if not url:
-        raise BancoNaoConfigurado
+        raise DatabaseNotConfigured
     if _pool is None:
-        with _trava_pool:
-            # confere de novo dentro da trava: duas primeiras requisições ao mesmo tempo criavam
-            # dois pools, e as conexões do que ficava para trás nunca eram fechadas
+        with _pool_lock:
+            # check again inside the lock: two simultaneous first requests used to create
+            # two pools, and the connections of the one left behind were never closed
             if _pool is None:
-                _pool = _abre(url)
+                _pool = _open_pool(url)
     with _pool.connection() as con:
         yield con
 
 
-def fecha() -> None:
+def close_pool() -> None:
     global _pool
-    with _trava_pool:
+    with _pool_lock:
         if _pool is not None:
             _pool.close()
             _pool = None

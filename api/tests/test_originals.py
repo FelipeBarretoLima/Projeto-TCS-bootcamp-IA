@@ -62,7 +62,7 @@ def test_importacao_devolve_original_e_grava_so_cifrado(db):
     assert (cartao["contraparte"], cartao["contraparte_original"]) == ("IFOOD", "IFOOD *PIZZARIA IMAGINARIA")
     assert "123.456" not in str(r.json())  # o CPF não entra nem no original
 
-    gravadas = db.transacoes(USUARIO.id)
+    gravadas = db.transactions(USUARIO.id)
     assert {t["contraparte"] for t in gravadas} == {INDIVIDUAL_PERSON, "IFOOD"}
     for t in gravadas:
         assert t["original_cifrado"] and "ZEFERINO" not in t["original_cifrado"]
@@ -89,7 +89,7 @@ def test_sem_chave_importa_normal_e_extrato_mostra_o_anonimizado(db, monkeypatch
     r = _envia()
     assert r.status_code == 200
     assert r.json()["transacoes"][0]["contraparte_original"] == "ZEFERINO INVENTADO SILVA"  # só na resposta
-    assert all(t["original_cifrado"] is None for t in db.transacoes(USUARIO.id))
+    assert all(t["original_cifrado"] is None for t in db.transactions(USUARIO.id))
     pix = TestClient(app).get("/api/transacoes").json()[1]
     assert (pix["contraparte"], pix["contraparte_original"]) == (INDIVIDUAL_PERSON, None)
 
@@ -98,11 +98,11 @@ def test_chave_mal_formada_na_importacao_da_500_sem_gravar(db, monkeypatch):
     monkeypatch.setattr(config, "CHAVE_ORIGINAIS", "nao-e-uma-chave")
     r = _envia()
     assert r.status_code == 500 and "CHAVE_ORIGINAIS" in r.json()["detail"]
-    assert db.transacoes(USUARIO.id) == []
+    assert db.transactions(USUARIO.id) == []
 
 
 def test_chat_e_ml_so_veem_o_anonimizado(db):
     _envia()
-    df = queries.tabela(db.transacoes(USUARIO.id))
+    df = queries.tabela(db.transactions(USUARIO.id))
     assert "original_cifrado" not in df.columns
     assert set(df["contraparte"]) == {INDIVIDUAL_PERSON, "IFOOD"}

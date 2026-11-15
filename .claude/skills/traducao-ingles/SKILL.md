@@ -16,14 +16,16 @@ exatamente como estão.
 3. Um módulo por vez, nesta ordem: `extraction/` → `ml/` → `database/` → `agent/` → `api/`.
    O `frontend/` está fora da tradução.
 
-## Situação atual (2026-11-12)
+## Situação atual (2026-11-15)
 
-A tradução foi **encerrada por decisão do usuário** depois de `ml/`:
+O usuário retomou a tradução em 2026-11-15 (branch `refactor/english-database-agent-api`):
 - Feito: estrutura de pastas e arquivos (todos os módulos Python), pacote `statement`,
-  conteúdo de `extraction/` e de `ml/`.
-- Não traduzido (de propósito): o **conteúdo** de `database/`, `agent/` e `api/` (nomes de
-  funções, variáveis, comentários). Só os nomes de pastas e arquivos deles estão em inglês.
-- Não retome os módulos restantes sem o usuário pedir. Se pedir, siga as regras abaixo.
+  conteúdo de `extraction/`, `ml/` e `database/` (`Database`, `SaveResult`, `save_statement`...).
+- Em andamento: `agent/`, depois `api/`.
+- Em `database/`, os parâmetros com nome de coluna ficaram em português (`nome_arquivo`,
+  `hash_arquivo`, `periodo_inicio`, `categoria`, e os de `finish_training`, que o retreino passa
+  por `**registro` com chaves em texto).
+- As skills em `skills/` (recriação da aplicação) ficam em português: decisão do usuário.
 4. Apresente ao usuário o plano de cada módulo antes de editar e espere a confirmação.
 5. Renomeie por tokens, não por texto: um script com `tokenize` troca só nomes de código e nunca
    toca em strings, regex ou textos dos PDFs. Antes de aplicar, verifique colisões (nome novo que

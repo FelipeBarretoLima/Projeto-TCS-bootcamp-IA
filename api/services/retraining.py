@@ -25,8 +25,8 @@ from typing import Any
 import joblib
 import pandas as pd
 
-from database.connection import conexao
-from database.repository import Banco
+from database.connection import connect
+from database.repository import Database
 from statement.models import COLUMNS
 from ml.retrain import CORRECTIONS_TO_RETRAIN, read_base, retrain
 
@@ -39,17 +39,17 @@ _um_por_vez = threading.Lock()
 
 
 @contextmanager
-def _abre_banco() -> Iterator[Banco]:
-    with conexao(config.DATABASE_URL) as con:
-        yield Banco(con)
+def _abre_banco() -> Iterator[Database]:
+    with connect(config.DATABASE_URL) as con:
+        yield Database(con)
 
 
 # trocado nos testes por um banco falso
-abre_banco: Callable[[], AbstractContextManager[Banco]] = _abre_banco
+abre_banco: Callable[[], AbstractContextManager[Database]] = _abre_banco
 
 
-def precisa_retreinar(db: Banco) -> bool:
-    return db.correcoes_desde_ultimo_treino() >= CORRECTIONS_TO_RETRAIN and not db.treino_rodando()
+def precisa_retreinar(db: Database) -> bool:
+    return db.corrections_since_last_training() >= CORRECTIONS_TO_RETRAIN and not db.training_running()
 
 
 def _como_tabela(linhas: list[dict[str, Any]]) -> pd.DataFrame:
@@ -76,10 +76,10 @@ def executa_retreino() -> dict[str, Any] | None:
         return None
     try:
         with abre_banco() as db:
-            treino_id = db.inicia_treino_se_livre()  # atômico: outro processo pode estar retreinando
+            treino_id = db.start_training_if_free()  # atômico: outro processo pode estar retreinando
             if treino_id is None:
                 return None
-            correcoes = _como_tabela(db.correcoes_para_treino())
+            correcoes = _como_tabela(db.corrections_for_training())
         try:
             r = retrain(read_base(config.CAMINHO_TREINO_BASE), correcoes, carrega_modelo(config.CAMINHO_MODELO))
             _salva(r.model)
@@ -93,7 +93,7 @@ def executa_retreino() -> dict[str, Any] | None:
             log.exception("retreino falhou")
             registro = dict(status="erro", correcoes=len(correcoes), mensagem=type(exc).__name__)
         with abre_banco() as db:
-            db.conclui_treino(treino_id, **registro)
+            db.finish_training(treino_id, **registro)
         log.info("retreino %s: %s", treino_id, registro)
         return registro
     finally:
@@ -108,7 +108,7 @@ def _em_segundo_plano(alvo: Callable[[], object]) -> None:
 inicia_em_segundo_plano: Callable[[Callable[[], object]], None] = _em_segundo_plano
 
 
-def dispara_se_preciso(db: Banco) -> bool:
+def dispara_se_preciso(db: Database) -> bool:
     """Chamado depois de gravar uma correção (já confirmada no banco). True se disparou."""
     try:
         if not precisa_retreinar(db):

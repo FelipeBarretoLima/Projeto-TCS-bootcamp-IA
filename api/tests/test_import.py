@@ -23,9 +23,9 @@ def test_importa_e_grava_no_usuario_logado(db):
     assert r.status_code == 200
     g = r.json()["gravacao"]
     assert (g["gravadas"], g["repetidas"]) == (2, 0)
-    [extrato] = db.lista_extratos(USUARIO.id)
+    [extrato] = db.list_statements(USUARIO.id)
     assert extrato["nome_arquivo"] == "fatura jan.csv"
-    assert len(db.transacoes(USUARIO.id)) == 2 and db.transacoes(OUTRO.id) == []
+    assert len(db.transactions(USUARIO.id)) == 2 and db.transactions(OUTRO.id) == []
 
 
 def test_mesmo_arquivo_duas_vezes_da_409(db):
@@ -33,7 +33,7 @@ def test_mesmo_arquivo_duas_vezes_da_409(db):
     assert _envia(csv).status_code == 200
     r = _envia(csv)
     assert r.status_code == 409
-    assert len(db.transacoes(USUARIO.id)) == 1
+    assert len(db.transactions(USUARIO.id)) == 1
 
 
 def test_extratos_sobrepostos_nao_duplicam_mas_compras_iguais_de_verdade_entram(db):
@@ -45,14 +45,14 @@ def test_extratos_sobrepostos_nao_duplicam_mas_compras_iguais_de_verdade_entram(
     assert _envia(a, "a.csv").json()["gravacao"]["gravadas"] == 2
     g = _envia(b, "b.csv").json()["gravacao"]
     assert (g["gravadas"], g["repetidas"]) == (2, 2)
-    assert len(db.transacoes(USUARIO.id)) == 4
+    assert len(db.transactions(USUARIO.id)) == 4
 
 
 def test_extrato_rejeitado_nao_grava(db):
     r = _envia("a,b,c\n1,2,3\n", "planilha.csv")
     assert r.status_code == 200
     assert r.json()["gravacao"] is None
-    assert db.lista_extratos(USUARIO.id) == []
+    assert db.list_statements(USUARIO.id) == []
 
 
 def test_apaga_extrato_e_suas_transacoes(db, logado_como):
@@ -62,7 +62,7 @@ def test_apaga_extrato_e_suas_transacoes(db, logado_como):
     assert cliente.delete(f"/api/extratos/{eid}").status_code == 404  # não é dele
     logado_como(USUARIO)
     assert cliente.delete(f"/api/extratos/{eid}").status_code == 204
-    assert db.transacoes(USUARIO.id) == [] and cliente.get("/api/extratos").json() == []
+    assert db.transactions(USUARIO.id) == [] and cliente.get("/api/extratos").json() == []
 
 
 def test_excluir_extrato_nao_apaga_o_que_outro_extrato_tambem_trouxe(db):
@@ -73,11 +73,11 @@ def test_excluir_extrato_nao_apaga_o_que_outro_extrato_tambem_trouxe(db):
     eb = _envia(b, "b.csv").json()["gravacao"]["extrato_id"]
     assert cliente.delete(f"/api/extratos/{ea}").status_code == 204
     # o dia 3 também estava no extrato b: continua na conta, agora como transação do b
-    assert sorted(t["data"].day for t in db.transacoes(USUARIO.id)) == [3, 5]
+    assert sorted(t["data"].day for t in db.transactions(USUARIO.id)) == [3, 5]
     [restante] = cliente.get("/api/extratos").json()
     assert restante["id"] == eb and restante["linhas_gravadas"] == 2
     assert cliente.delete(f"/api/extratos/{eb}").status_code == 204
-    assert db.transacoes(USUARIO.id) == []
+    assert db.transactions(USUARIO.id) == []
 
 
 def test_sem_login_da_401():

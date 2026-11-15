@@ -44,23 +44,23 @@ def _corrige(cliente, ids, categoria="alimentacao_fora"):
 def test_correcao_fica_gravada_antes_de_verificar_o_retreino(db):
     cliente, [i] = _importa_e_lista(1)
     _corrige(cliente, [i])
-    assert db.confirmacoes == 1 and db.treinos_ == []  # 1 correção: ainda não retreina
+    assert db.commits == 1 and db.trainings_ == []  # 1 correção: ainda não retreina
 
 
 def test_retreina_na_15a_correcao_e_troca_o_modelo(db, com_csv_base):
     cliente, ids = _importa_e_lista(N + 2)
     antes = com_csv_base.stat().st_mtime_ns
     _corrige(cliente, ids[: N - 1])
-    assert db.treinos_ == []
+    assert db.trainings_ == []
     _corrige(cliente, ids[N - 1: N])  # a 15ª
-    [t] = db.treinos_
+    [t] = db.trainings_
     assert t["status"] == "ok" and t["correcoes"] == N
     assert t["acerto_correcoes_antes"] == 0.0 and t["acerto_correcoes_depois"] == 100.0
     assert com_csv_base.stat().st_mtime_ns != antes  # .pkl novo no lugar
     assert com_csv_base.with_name("modelo.anterior.pkl").exists()  # e o anterior guardado
     # o contador recomeça: mais 2 correções não disparam outro retreino
     _corrige(cliente, ids[N:])
-    assert len(db.treinos_) == 1
+    assert len(db.trainings_) == 1
 
 
 def test_modelo_novo_classifica_a_proxima_importacao(db, com_csv_base):
@@ -75,26 +75,26 @@ def test_modelo_novo_classifica_a_proxima_importacao(db, com_csv_base):
 def test_correcao_para_sem_categoria_nao_conta(db, com_csv_base):
     cliente, ids = _importa_e_lista(N)
     _corrige(cliente, ids, categoria=None)
-    assert db.treinos_ == []
+    assert db.trainings_ == []
 
 
 def test_sem_csv_base_registra_erro_e_a_correcao_continua_valendo(db):
     cliente, ids = _importa_e_lista(N)
     _corrige(cliente, ids)
-    [t] = db.treinos_
+    [t] = db.trainings_
     assert t["status"] == "erro" and t["mensagem"].startswith("FileNotFoundError")
-    assert all(l["categoria"] == "alimentacao_fora" for l in db.linhas)
+    assert all(l["categoria"] == "alimentacao_fora" for l in db.rows)
 
 
 def test_falha_na_verificacao_nao_atrapalha_a_correcao(db, monkeypatch):
     cliente, [i] = _importa_e_lista(1)
-    monkeypatch.setattr(db, "correcoes_desde_ultimo_treino", lambda: 1 / 0)
+    monkeypatch.setattr(db, "corrections_since_last_training", lambda: 1 / 0)
     _corrige(cliente, [i])
-    assert db.linhas[0]["categoria"] == "alimentacao_fora"
+    assert db.rows[0]["categoria"] == "alimentacao_fora"
 
 
 def test_nao_roda_dois_retreinos_juntos(db, com_csv_base):
-    db.inicia_treino()  # um "rodando"
+    db.start_training()  # um "rodando"
     assert retraining.executa_retreino() is None
 
 
@@ -115,16 +115,16 @@ def test_depois_de_um_erro_nao_retreina_a_cada_correcao(db):
     # sem CSV base nos testes: o retreino da 15ª correção falha
     cliente, ids = _importa_e_lista(N + 3)
     _corrige(cliente, ids[:N])
-    assert [t["status"] for t in db.treinos_] == ["erro"]
+    assert [t["status"] for t in db.trainings_] == ["erro"]
     # antes, cada correção seguinte a um erro disparava outro retreino (que falhava de novo)
     _corrige(cliente, ids[N:])
-    assert len(db.treinos_) == 1
+    assert len(db.trainings_) == 1
 
 
 def test_inicio_do_retreino_e_atomico(db, com_csv_base):
-    """Quem inicia o retreino é o banco (inicia_treino_se_livre), não um "confere e depois grava"."""
-    assert db.inicia_treino_se_livre() is not None
-    assert db.inicia_treino_se_livre() is None
+    """Quem inicia o retreino é o banco (start_training_if_free), não um "confere e depois grava"."""
+    assert db.start_training_if_free() is not None
+    assert db.start_training_if_free() is None
     assert retraining.executa_retreino() is None
 
 
@@ -139,13 +139,13 @@ def test_correcao_sobrevive_a_exclusao_do_extrato_e_conta_no_retreino(db, com_cs
     cliente, ids = _importa_e_lista(N - 1)
     _corrige(cliente, ids)
     _apaga_o_extrato(cliente)
-    assert db.linhas == [] and len(db.correcoes_para_treino()) == N - 1
+    assert db.rows == [] and len(db.corrections_for_training()) == N - 1
     # um extrato novo e 1 correção completam as 15: o retreino usa também as do extrato excluído
     nova = f"{CAB}20/02/2024,-4.70,11111111-2222-4333-8444-999999999999,Compra no débito - UNIVERSIDADE FICTICIA DO SUL\n"
     assert cliente.post("/api/extratos", files={"arquivo": ("f.csv", nova.encode())}).status_code == 200
     [t] = cliente.get("/api/transacoes", params={"inicio": "2024-01-01"}).json()
     _corrige(cliente, [t["id"]])
-    [treino] = db.treinos_
+    [treino] = db.trainings_
     assert treino["status"] == "ok" and treino["correcoes"] == N
 
 
@@ -155,7 +155,7 @@ def test_reimportar_e_corrigir_de_novo_nao_duplica_a_correcao(db):
     _apaga_o_extrato(cliente)
     cliente, [j] = _importa_e_lista(1)  # o mesmo arquivo de novo
     _corrige(cliente, [j], categoria="transporte")
-    [c] = db.correcoes_para_treino()
+    [c] = db.corrections_for_training()
     assert c["categoria"] == "transporte"
 
 
@@ -163,11 +163,11 @@ def test_voltar_para_sem_categoria_desfaz_a_correcao(db):
     cliente, [i] = _importa_e_lista(1)
     _corrige(cliente, [i])
     _corrige(cliente, [i], categoria=None)
-    assert db.correcoes_para_treino() == []
+    assert db.corrections_for_training() == []
 
 
 def test_excluir_a_conta_apaga_as_correcoes(db):
     cliente, ids = _importa_e_lista(2)
     _corrige(cliente, ids)
     assert cliente.delete("/api/conta").status_code == 204
-    assert db.correcoes_para_treino() == []
+    assert db.corrections_for_training() == []
