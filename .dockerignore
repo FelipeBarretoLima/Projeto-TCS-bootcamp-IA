@@ -15,7 +15,7 @@ skills
 references
 
 # Render copies the Secret Files to the root of the build context: keep them out of the image
-svm_tfidf.pkl.b64
+svm_tfidf.pkl.gz.b64
 estabelecimentos_revisar.csv
 estabelecimentos_novos.csv
-transacoes_rotuladas.csv
+transacoes_rotuladas.csv.gz.b64
