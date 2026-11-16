@@ -1,0 +1,21 @@
+# Never inside the image: real data, secrets, local builds and tools
+.git
+.venv
+**/__pycache__
+.pytest_cache
+*.egg-info
+.env
+data/
+ml/dados/
+ml/modelos/
+frontend/node_modules
+frontend/dist
+.claude
+skills
+references
+
+# Render copies the Secret Files to the root of the build context: keep them out of the image
+svm_tfidf.pkl.b64
+estabelecimentos_revisar.csv
+estabelecimentos_novos.csv
+transacoes_rotuladas.csv

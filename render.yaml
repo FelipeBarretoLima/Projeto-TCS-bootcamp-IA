@@ -1,0 +1,22 @@
+# Render Blueprint: New > Blueprint > this repository. The secret values (sync: false) are asked
+# when the Blueprint is created; the Secret Files are added in the dashboard (see deploy/render/README.md).
+services:
+  - type: web
+    name: tas
+    runtime: docker
+    plan: free
+    region: virginia # Render has no region in Brazil; Virginia is the closest to Supabase (Sao Paulo)
+    branch: main
+    dockerfilePath: ./Dockerfile
+    healthCheckPath: /api/saude
+    envVars:
+      - key: DATABASE_URL
+        sync: false
+      - key: SUPABASE_PUBLISHABLE_KEY
+        sync: false
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: GEMINI_MODEL
+        sync: false
+      - key: CHAVE_ORIGINAIS
+        sync: false
