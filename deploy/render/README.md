@@ -24,9 +24,13 @@ Cria `~\render-secret-files` (fora do projeto) com:
 
 | Arquivo | Para quê |
 |---|---|
-| `svm_tfidf.pkl.b64` | o classificador, em base64 (o painel do Render só aceita texto) |
+| `svm_tfidf.pkl.gz.b64` | o classificador, compactado (gzip) e em base64 |
 | `estabelecimentos_revisar.csv`, `estabelecimentos_novos.csv` | os mapas com as pessoas marcadas (anonimização) |
-| `transacoes_rotuladas.csv` | CSV base do retreino (opcional) |
+| `transacoes_rotuladas.csv.gz.b64` | CSV base do retreino, compactado (opcional) |
+
+O Render limita **todos os Secret Files de um serviço a 1 MB juntos** e só aceita texto: por isso
+os dois arquivos grandes vão compactados e em base64 (~660 KB no total). O `start.sh` desfaz isso
+ao subir. O script mostra o total e avisa se passar do limite.
 
 **Têm dados reais:** apague a pasta depois de colar no Render.
 
@@ -38,7 +42,8 @@ Cria `~\render-secret-files` (fora do projeto) com:
    `GEMINI_API_KEY`, `GEMINI_MODEL` e `CHAVE_ORIGINAIS` (a **mesma** chave da equipe, senão os
    originais já gravados não abrem).
 3. No serviço criado: **Environment > Secret Files > Add Secret File**, um para cada arquivo
-   do passo 1. O **nome tem que ser exatamente o do arquivo**; no conteúdo, cole o texto do arquivo.
+   do passo 1. O **nome tem que ser exatamente o do arquivo**; no conteúdo, cole o texto do arquivo
+   (ex.: `Get-Content -Raw -Encoding UTF8 "$HOME\render-secret-files\<arquivo>" | Set-Clipboard`).
 4. **Manual Deploy > Deploy latest commit**. O primeiro build leva ~5–10 min.
 5. Teste: `https://<nome>.onrender.com/api/saude` deve mostrar `{"status":"ok"}`.
 
