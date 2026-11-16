@@ -5,7 +5,7 @@ import pytest
 from api import config
 from api.auth import current_user
 from api.dependencies import database, open_database
-from api.rate_limit import CHAT_LIMIT, IMPORT_LIMIT
+from api.rate_limit import CHAT_LIMIT, IMPORT_LIMIT, TRANSCRIPTION_LIMIT
 from api.main import app
 from api.tests.fakes import USER, FakeDatabase
 
@@ -72,3 +72,4 @@ def limits_reset():
     """Each test starts with no uses counted in the per-user limit."""
     CHAT_LIMIT.reset()
     IMPORT_LIMIT.reset()
+    TRANSCRIPTION_LIMIT.reset()

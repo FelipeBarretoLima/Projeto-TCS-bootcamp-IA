@@ -38,6 +38,8 @@ class RateLimit:
 
 CHAT_LIMIT = RateLimit(10, 60, "perguntas")  # 10 questions per minute
 IMPORT_LIMIT = RateLimit(20, 600, "importações")  # 20 statements every 10 minutes
+# separate from the chat: a voice question spends one transcription + one question, without sharing the limit
+TRANSCRIPTION_LIMIT = RateLimit(10, 60, "mensagens de voz")  # 10 per minute
 
 
 def limit_chat(user: Annotated[User, Depends(current_user)]) -> None:
@@ -46,3 +48,7 @@ def limit_chat(user: Annotated[User, Depends(current_user)]) -> None:
 
 def limit_import(user: Annotated[User, Depends(current_user)]) -> None:
     IMPORT_LIMIT.check(str(user.id))
+
+
+def limit_transcription(user: Annotated[User, Depends(current_user)]) -> None:
+    TRANSCRIPTION_LIMIT.check(str(user.id))

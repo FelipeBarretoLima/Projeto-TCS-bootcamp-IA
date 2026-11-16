@@ -5,21 +5,28 @@ import re
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Path, Query, Response
+from fastapi import APIRouter, Depends, File, HTTPException, Path, Query, Response, UploadFile
 
 from agent import queries
 from agent.assistant import answer
+from agent.transcription import NoSpeech, transcribe
 from database.repository import Database, ConversationDeleted
 
 from ..auth import User, current_user
 from ..dependencies import OpenDatabase, assistant_model, database, open_database
-from ..schemas import ChatAnswer, Conversation, Dashboard, Message, NewTitle, Question
-from ..rate_limit import limit_chat
+from ..schemas import ChatAnswer, Conversation, Dashboard, Message, NewTitle, Question, Transcription
+from ..rate_limit import limit_chat, limit_transcription
 
 router = APIRouter(tags=["assistente"])
 log = logging.getLogger(__name__)
 
 TITLE_LENGTH = 60
+
+# voice message: up to 15 s recorded in the browser (~120 KB in Opus, ~250 KB in AAC on the iPhone);
+# 1 MB leaves room for devices that record with higher quality
+MAX_AUDIO_SIZE = 1024 * 1024
+# what MediaRecorder records in each browser (Chrome/Firefox: webm or ogg; Safari: mp4) and Gemini reads
+ACCEPTED_AUDIO = {"audio/webm", "audio/ogg", "audio/mp4", "audio/mpeg", "audio/aac", "audio/wav", "audio/x-m4a"}
 
 
 @router.get("/painel")
@@ -123,3 +130,33 @@ def chat(
         except ConversationDeleted:
             raise HTTPException(404, "a conversa foi apagada enquanto o assistente respondia") from None
     return ChatAnswer(conversa_id=conversation_id, pergunta=Message(**question_msg), resposta=Message(**answer_msg))
+
+
+# `def` (not `async def`): the Gemini call is blocking; FastAPI runs it in a separate thread
+@router.post("/chat/transcricao", dependencies=[Depends(limit_transcription)])
+def transcribe_audio(
+    audio: Annotated[UploadFile, File(description="Mensagem de voz gravada no navegador (até 15 s)")],
+    user: Annotated[User, Depends(current_user)],
+    model=Depends(assistant_model),
+) -> Transcription:
+    """Only transcribes: nothing is saved. The text goes back to the chat field, and the user checks
+    it and sends it through the /chat route. The audio is not stored anywhere."""
+    kind = (audio.content_type or "").split(";")[0].strip().lower()  # "audio/webm;codecs=opus" -> "audio/webm"
+    if kind not in ACCEPTED_AUDIO:
+        raise HTTPException(415, "formato de áudio não aceito pelo assistente")
+
+    content = audio.file.read(MAX_AUDIO_SIZE + 1)
+    if len(content) > MAX_AUDIO_SIZE:
+        raise HTTPException(413, "mensagem de voz longa demais: grave até 15 segundos")
+    if not content:
+        raise HTTPException(400, "a gravação veio vazia; tente de novo")
+
+    try:
+        text = transcribe(model, content, kind)
+    except NoSpeech:
+        raise HTTPException(422, "não deu para entender nenhuma fala no áudio; tente de novo") from None
+    except Exception:
+        # without the content in the log: the speech may contain personal data
+        log.exception("falha ao transcrever a mensagem de voz")
+        raise HTTPException(502, "não foi possível transcrever o áudio agora; tente de novo em instantes") from None
+    return Transcription(texto=text[:1000])  # the same limit as a typed question

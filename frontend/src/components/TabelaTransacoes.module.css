@@ -158,3 +158,12 @@
   cursor: progress;
   opacity: 0.6;
 }
+
+@media (max-width: 720px) {
+  /* 16px evita o zoom automático do iPhone ao tocar; a altura maior facilita o toque */
+  .seletor {
+    min-height: 2.25rem;
+    padding: 0.3rem 0.75rem;
+    font-size: 1rem;
+  }
+}

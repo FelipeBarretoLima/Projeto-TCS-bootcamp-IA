@@ -161,6 +161,10 @@ class ChatAnswer(BaseModel):
     resposta: Message
 
 
+class Transcription(BaseModel):
+    texto: str  # what was said in the audio; the user checks it before sending it as a question
+
+
 class NewCategory(BaseModel):
     categoria: str | None  # one of the 8 categories; None = uncategorized
 
