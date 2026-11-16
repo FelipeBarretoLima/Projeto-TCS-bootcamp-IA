@@ -1,0 +1,3 @@
+# Scripts that run on Linux (container) always keep LF line endings, even on Windows
+*.sh    text eol=lf
+Dockerfile text eol=lf
