@@ -9,7 +9,7 @@ CSV as is (contract columns, without `categoria`) and returns the category of ea
 
     import joblib, pandas as pd
     model = joblib.load("ml/modelos/svm_tfidf.pkl")
-    statement = pd.read_csv("data/teste/u10.csv", keep_default_na=False)
+    statement = pd.read_csv("data/test/u10.csv", keep_default_na=False)
     statement["categoria_prevista"] = model.predict(statement)
 
 The .pkl stays outside git (ml/modelos/): the TF-IDF vocabulary keeps pieces of store names.

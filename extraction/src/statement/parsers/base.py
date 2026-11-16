@@ -46,7 +46,7 @@ class UnknownHistory(ExtractionError):
     code = "HistoricoDesconhecido"  # stable code: goes to the report/API
 
     def __init__(self, parser: str, historico: str):
-        # the history stays in the attribute (goes to data/privado), not in the message
+        # the history stays in the attribute (goes to data/private), not in the message
         super().__init__(f"parser {parser}: histórico fora do mapa explícito")
         self.parser = parser
         self.historico = historico

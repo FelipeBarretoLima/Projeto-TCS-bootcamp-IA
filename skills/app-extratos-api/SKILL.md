@@ -11,7 +11,7 @@ agente (`agent`). O frontend só fala com ela, sempre em `/api/...`.
 ```
 api/
   main.py            app, routers sob /api, ciclo de vida, CORS, página compilada
-  config.py          .env e caminhos (modelo, CSV base, data/privado, frontend/dist), limites
+  config.py          .env e caminhos (modelo, CSV base, data/private, frontend/dist), limites
   auth.py            Usuario atual a partir do token do Supabase (cache de 60 s)
   dependencies.py    banco() por requisição e o modelo do assistente (criado uma vez)
   rate_limit.py      limite por usuário em memória (chat e importação)

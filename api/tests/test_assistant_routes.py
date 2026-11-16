@@ -1,4 +1,4 @@
-"""Dashboard e chat. O Gemini é trocado por uma resposta fixa (nenhuma chamada externa)."""
+"""Dashboard and chat. Gemini is replaced by a fixed answer (no external call)."""
 
 from datetime import date
 from decimal import Decimal
@@ -6,146 +6,146 @@ from decimal import Decimal
 import pytest
 from fastapi.testclient import TestClient
 
-from agent.assistant import Resposta
-from api.dependencies import modelo_do_assistente
+from agent.assistant import Answer
+from api.dependencies import assistant_model
 from api.main import app
-from api.routes import assistant as rota
+from api.routes import assistant as route
 
-from api.tests.fakes import OUTRO, USUARIO
+from api.tests.fakes import OTHER_USER, USER
 
-GRAFICO = {"tipo": "barras", "titulo": "Teste", "rotulos": ["jan/24"],
-           "series": [{"nome": "Gastos", "valores": [10.0]}], "formato": "moeda"}
+CHART = {"tipo": "barras", "titulo": "Teste", "rotulos": ["jan/24"],
+         "series": [{"nome": "Gastos", "valores": [10.0]}], "formato": "moeda"}
 
 
 @pytest.fixture
-def chamadas(monkeypatch):
-    feitas = []
+def calls(monkeypatch):
+    made = []
 
-    def responde_falso(modelo, df, pergunta, historico=()):
-        feitas.append({"pergunta": pergunta, "historico": list(historico), "linhas": len(df)})
-        return Resposta(f"resposta para: {pergunta}", GRAFICO)
+    def fake_answer(model, df, question, history=()):
+        made.append({"question": question, "history": list(history), "rows": len(df)})
+        return Answer(f"resposta para: {question}", CHART)
 
-    app.dependency_overrides[modelo_do_assistente] = lambda: object()
-    monkeypatch.setattr(rota, "responde", responde_falso)
-    return feitas
-
-
-def _transacao(db, data, valor, tipo, categoria, usuario=USUARIO):
-    db.linhas.append({"usuario_id": usuario.id, "extrato_id": None, "data": data, "historico": "X",
-                      "contraparte": "LOJA", "valor": Decimal(valor), "tipo": tipo, "meio": "pix",
-                      "banco": "nubank", "categoria": categoria, "origem_categoria": "regra"})
+    app.dependency_overrides[assistant_model] = lambda: object()
+    monkeypatch.setattr(route, "answer", fake_answer)
+    return made
 
 
-def test_painel_sem_dados():
+def _transaction(db, day, amount, kind, category, user=USER):
+    db.rows.append({"usuario_id": user.id, "extrato_id": None, "data": day, "historico": "X",
+                    "contraparte": "LOJA", "valor": Decimal(amount), "tipo": kind, "meio": "pix",
+                    "banco": "nubank", "categoria": category, "origem_categoria": "regra"})
+
+
+def test_dashboard_without_data():
     r = TestClient(app).get("/api/painel").json()
     assert r["tem_dados"] is False and r["grafico"] is None
 
 
-def test_painel_com_dados(db):
-    _transacao(db, date(2024, 1, 5), "1000.00", "entrada", "receitas")
-    _transacao(db, date(2024, 2, 5), "3000.00", "entrada", "receitas")
-    _transacao(db, date(2024, 2, 6), "-200.00", "saida", "mercado")
-    _transacao(db, date(2024, 2, 7), "-500.00", "saida", "financeiro")   # pagar fatura não é despesa
-    _transacao(db, date(2024, 2, 8), "-999.00", "saida", "mercado", OUTRO)  # de outro usuário
+def test_dashboard_with_data(db):
+    _transaction(db, date(2024, 1, 5), "1000.00", "entrada", "receitas")
+    _transaction(db, date(2024, 2, 5), "3000.00", "entrada", "receitas")
+    _transaction(db, date(2024, 2, 6), "-200.00", "saida", "mercado")
+    _transaction(db, date(2024, 2, 7), "-500.00", "saida", "financeiro")   # paying the card bill is not an expense
+    _transaction(db, date(2024, 2, 8), "-999.00", "saida", "mercado", OTHER_USER)  # from another user
     r = TestClient(app).get("/api/painel").json()
     assert (r["mes"], r["receitas"], r["despesas"], r["saldo"]) == ("fev/24", 3000.0, 200.0, 2800.0)
     assert r["grafico"]["rotulos"][-2:] == ["jan/24", "fev/24"]
 
 
-def test_chat_cria_conversa_e_guarda_as_mensagens(db, chamadas):
-    _transacao(db, date(2024, 1, 5), "-10.00", "saida", "mercado")
-    cliente = TestClient(app)
-    r = cliente.post("/api/chat", json={"mensagem": "quanto gastei de mercado?"}).json()
+def test_chat_creates_a_conversation_and_keeps_the_messages(db, calls):
+    _transaction(db, date(2024, 1, 5), "-10.00", "saida", "mercado")
+    client = TestClient(app)
+    r = client.post("/api/chat", json={"mensagem": "quanto gastei de mercado?"}).json()
     assert r["resposta"]["texto"] == "resposta para: quanto gastei de mercado?"
     assert r["resposta"]["grafico"]["titulo"] == "Teste"
-    assert chamadas[0]["linhas"] == 1 and chamadas[0]["historico"] == []
-    [conversa] = cliente.get("/api/conversas").json()
-    assert conversa["id"] == r["conversa_id"] and conversa["titulo"] == "quanto gastei de mercado?"
+    assert calls[0]["rows"] == 1 and calls[0]["history"] == []
+    [conversation] = client.get("/api/conversas").json()
+    assert conversation["id"] == r["conversa_id"] and conversation["titulo"] == "quanto gastei de mercado?"
 
-    # continuar a conversa manda o histórico
-    cliente.post("/api/chat", json={"mensagem": "e transporte?", "conversa_id": r["conversa_id"]})
-    assert [m["texto"] for m in chamadas[1]["historico"]] == [
+    # continuing the conversation sends the history
+    client.post("/api/chat", json={"mensagem": "e transporte?", "conversa_id": r["conversa_id"]})
+    assert [m["texto"] for m in calls[1]["history"]] == [
         "quanto gastei de mercado?", "resposta para: quanto gastei de mercado?"]
-    mensagens = cliente.get(f"/api/conversas/{r['conversa_id']}/mensagens").json()
-    assert [m["papel"] for m in mensagens] == ["usuario", "agente", "usuario", "agente"]
+    messages = client.get(f"/api/conversas/{r['conversa_id']}/mensagens").json()
+    assert [m["papel"] for m in messages] == ["usuario", "agente", "usuario", "agente"]
 
 
-def test_titulo_longo_e_cortado(chamadas):
+def test_long_title_is_cut(calls):
     r = TestClient(app).post("/api/chat", json={"mensagem": "a" * 200}).json()
     [c] = TestClient(app).get("/api/conversas").json()
     assert len(c["titulo"]) == 60 and c["titulo"].endswith("…") and r["conversa_id"] == c["id"]
 
 
-def test_conversa_de_outro_usuario_da_404(chamadas, logado_como):
+def test_another_users_conversation_gives_404(calls, logged_in_as):
     cid = TestClient(app).post("/api/chat", json={"mensagem": "oi"}).json()["conversa_id"]
-    logado_como(OUTRO)
-    cliente = TestClient(app)
-    assert cliente.get(f"/api/conversas/{cid}/mensagens").status_code == 404
-    assert cliente.post("/api/chat", json={"mensagem": "oi", "conversa_id": cid}).status_code == 404
-    assert cliente.delete(f"/api/conversas/{cid}").status_code == 404
-    assert cliente.get("/api/conversas").json() == []
+    logged_in_as(OTHER_USER)
+    client = TestClient(app)
+    assert client.get(f"/api/conversas/{cid}/mensagens").status_code == 404
+    assert client.post("/api/chat", json={"mensagem": "oi", "conversa_id": cid}).status_code == 404
+    assert client.delete(f"/api/conversas/{cid}").status_code == 404
+    assert client.get("/api/conversas").json() == []
 
 
-def test_erro_do_assistente_nao_grava_nada(db, monkeypatch):
-    def quebra(*_a, **_k):
+def test_assistant_error_saves_nothing(db, monkeypatch):
+    def breaks(*_a, **_k):
         raise RuntimeError("Gemini fora do ar")
 
-    app.dependency_overrides[modelo_do_assistente] = lambda: object()
-    monkeypatch.setattr(rota, "responde", quebra)
+    app.dependency_overrides[assistant_model] = lambda: object()
+    monkeypatch.setattr(route, "answer", breaks)
     r = TestClient(app).post("/api/chat", json={"mensagem": "oi"})
     assert r.status_code == 502
-    assert db.mensagens_ == []
+    assert db.messages_ == []
 
 
-def test_mensagem_vazia_da_422_ou_400(chamadas):
-    cliente = TestClient(app)
-    assert cliente.post("/api/chat", json={"mensagem": ""}).status_code == 422
-    assert cliente.post("/api/chat", json={"mensagem": "   "}).status_code == 400
+def test_empty_message_gives_422_or_400(calls):
+    client = TestClient(app)
+    assert client.post("/api/chat", json={"mensagem": ""}).status_code == 422
+    assert client.post("/api/chat", json={"mensagem": "   "}).status_code == 400
 
 
-def test_conversa_apagada_durante_a_resposta_da_404_sem_gravar(db, chamadas, monkeypatch):
-    cliente = TestClient(app)
-    cid = cliente.post("/api/chat", json={"mensagem": "oi"}).json()["conversa_id"]
+def test_conversation_deleted_during_the_answer_gives_404_without_saving(db, calls, monkeypatch):
+    client = TestClient(app)
+    cid = client.post("/api/chat", json={"mensagem": "oi"}).json()["conversa_id"]
 
-    def apaga_no_meio(modelo, df, pergunta, historico=()):
-        db.apaga_conversa(USUARIO.id, __import__("uuid").UUID(cid))  # outra aba apagou
-        return Resposta("tarde demais", None)
+    def deletes_midway(model, df, question, history=()):
+        db.delete_conversation(USER.id, __import__("uuid").UUID(cid))  # another tab deleted it
+        return Answer("tarde demais", None)
 
-    monkeypatch.setattr(rota, "responde", apaga_no_meio)
-    r = cliente.post("/api/chat", json={"mensagem": "e agora?", "conversa_id": cid})
+    monkeypatch.setattr(route, "answer", deletes_midway)
+    r = client.post("/api/chat", json={"mensagem": "e agora?", "conversa_id": cid})
     assert r.status_code == 404 and "apagada" in r.json()["detail"]
 
 
-def test_nenhuma_conexao_fica_aberta_enquanto_o_llm_responde(db, monkeypatch):
-    """Com a conexão presa durante o LLM (2 a 30 s), 5 perguntas lentas esgotavam o pool."""
+def test_no_connection_stays_open_while_the_llm_answers(db, monkeypatch):
+    """With the connection held during the LLM (2 to 30 s), 5 slow questions exhausted the pool."""
     from contextlib import contextmanager
 
-    from api.dependencies import abre_banco, banco
+    from api.dependencies import database, open_database
 
-    abertas = []
+    open_connections = []
 
     @contextmanager
-    def conta_conexoes():
-        abertas.append(1)
+    def counts_connections():
+        open_connections.append(1)
         try:
             yield db
         finally:
-            abertas.pop()
+            open_connections.pop()
 
-    def conexao_da_requisicao_inteira():  # a dependência antiga, que prendia a conexão até o fim
-        with conta_conexoes() as d:
+    def whole_request_connection():  # the old dependency, which held the connection until the end
+        with counts_connections() as d:
             yield d
 
-    app.dependency_overrides[banco] = conexao_da_requisicao_inteira
+    app.dependency_overrides[database] = whole_request_connection
 
-    def responde_conferindo(modelo, df, pergunta, historico=()):
-        assert abertas == [], "havia uma conexão do banco aberta durante a chamada ao LLM"
-        return Resposta("ok", None)
+    def answer_checking(model, df, question, history=()):
+        assert open_connections == [], "havia uma conexão do banco aberta durante a chamada ao LLM"
+        return Answer("ok", None)
 
-    app.dependency_overrides[abre_banco] = lambda: conta_conexoes
-    app.dependency_overrides[modelo_do_assistente] = lambda: object()
-    monkeypatch.setattr(rota, "responde", responde_conferindo)
-    cliente = TestClient(app)
-    cid = cliente.post("/api/chat", json={"mensagem": "oi"}).json()["conversa_id"]
-    r = cliente.post("/api/chat", json={"mensagem": "e agora?", "conversa_id": cid})
-    assert r.status_code == 200 and len(db.mensagens_) == 4
+    app.dependency_overrides[open_database] = lambda: counts_connections
+    app.dependency_overrides[assistant_model] = lambda: object()
+    monkeypatch.setattr(route, "answer", answer_checking)
+    client = TestClient(app)
+    cid = client.post("/api/chat", json={"mensagem": "oi"}).json()["conversa_id"]
+    r = client.post("/api/chat", json={"mensagem": "e agora?", "conversa_id": cid})
+    assert r.status_code == 200 and len(db.messages_) == 4

@@ -5,7 +5,7 @@ For card purchases (and their refunds), after anonymization:
   2. individual -> PESSOA_FISICA when
        - the base name looks like a person (starts with a Brazilian first name and has no
          company/business word; errs on purpose towards "is a person": user decision on 2026-11-04), or
-       - the user marked e_pessoa = sim in the merchant map (data/privado, outside git).
+       - the user marked e_pessoa = sim in the merchant map (data/private, outside git).
 This way the ML model sees at inference exactly the same kind of counterparty it saw in training.
 """
 

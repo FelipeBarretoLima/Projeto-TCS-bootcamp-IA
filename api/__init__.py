@@ -1,1 +1,1 @@
-"""API HTTP (FastAPI) que expõe a extração e a classificação para o frontend."""
+"""HTTP API (FastAPI) that exposes the extraction and the classification to the frontend."""

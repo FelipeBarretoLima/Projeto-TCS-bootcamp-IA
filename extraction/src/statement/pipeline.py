@@ -232,7 +232,7 @@ def _finalize(
     holder_names = sorted(_holders(extracted) | set(other_holders))
     names = patterns.names_regex(holder_names)
 
-    # phase 2: normalize and anonymize (people marked by the user in the data/privado maps)
+    # phase 2: normalize and anonymize (people marked by the user in the data/private maps)
     people = merchants.declared_people(private_dir) if people is None else people
     for item in extracted:
         if item.result is not None:

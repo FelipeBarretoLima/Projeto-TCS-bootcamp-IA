@@ -76,7 +76,7 @@ from dotenv import load_dotenv
 RAIZ_PROJETO = Path(__file__).resolve().parents[1]
 load_dotenv(RAIZ_PROJETO / ".env")
 
-DIR_PRIVADO = RAIZ_PROJETO / "data" / "privado"            # mapas do usuário: só leitura
+DIR_PRIVADO = RAIZ_PROJETO / "data" / "private"            # mapas do usuário: só leitura
 CAMINHO_MODELO = RAIZ_PROJETO / "ml" / "modelos" / "svm_tfidf.pkl"
 CAMINHO_TREINO_BASE = RAIZ_PROJETO / "ml" / "dados" / "transacoes_rotuladas.csv"
 DIR_FRONTEND = RAIZ_PROJETO / "frontend" / "dist"
@@ -560,7 +560,7 @@ chama `db.muda_categoria` (404 se não for do usuário), `db.confirma()` e
 ```python
 @pytest.fixture(autouse=True)
 def dir_privado(tmp_path, monkeypatch):
-    """Nunca ler os mapas reais de data/privado: cada teste tem uma pasta vazia."""
+    """Nunca ler os mapas reais de data/private: cada teste tem uma pasta vazia."""
     pasta = tmp_path / "privado"
     pasta.mkdir()
     monkeypatch.setattr(config, "DIR_PRIVADO", pasta)

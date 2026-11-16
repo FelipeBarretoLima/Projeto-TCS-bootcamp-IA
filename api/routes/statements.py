@@ -5,101 +5,103 @@ from pathlib import PurePath
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, File, Form, HTTPException, Response, UploadFile
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Path, Response, UploadFile
 
-from database.repository import Banco, ExtratoRepetido
+from database.repository import Database, DuplicateStatement
 
 from .. import cipher
-from ..auth import Usuario, usuario_atual
-from ..config import EXTENSOES_ACEITAS, TAMANHO_MAXIMO, USUARIO_PADRAO
-from ..dependencies import banco
-from ..schemas import ExtratoEnviado, Gravacao, ResultadoImportacao, Transacao
-from ..rate_limit import limita_importacao
-from ..services.categorization import categoriza
-from ..services.extraction import VazamentoNaSaida, processa_extrato
+from ..auth import User, current_user
+from ..config import ACCEPTED_EXTENSIONS, DEFAULT_PSEUDONYM, MAX_SIZE
+from ..dependencies import database
+from ..schemas import ImportResult, SaveSummary, Transaction, UploadedStatement
+from ..rate_limit import limit_import
+from ..services.categorization import categorize
+from ..services.extraction import OutputLeak, process_statement
 
 router = APIRouter(tags=["extratos"])
 
 
-def _data_ou_none(texto: str) -> date | None:
+def _date_or_none(text: str) -> date | None:
     try:
-        return date.fromisoformat(texto)
+        return date.fromisoformat(text)
     except (TypeError, ValueError):
         return None
 
 
-def _para_gravar(t: Transacao) -> dict:
-    """O que vai para o banco: campos anonimizados + o original só cifrado (nunca em texto puro)."""
-    linha = t.model_dump(exclude={"historico_original", "contraparte_original"})
+def _to_save(t: Transaction) -> dict:
+    """What goes to the database: anonymized fields + the original only encrypted (never in plain text)."""
+    row = t.model_dump(exclude={"historico_original", "contraparte_original"})
     if t.historico_original is not None or t.contraparte_original is not None:
-        linha["original_cifrado"] = cipher.cifra(
+        row["original_cifrado"] = cipher.encrypt(
             {"historico": t.historico_original or "", "contraparte": t.contraparte_original or ""})
-    return linha
+    return row
 
 
-# `def` (não `async def`): a extração é pesada e bloqueante; o FastAPI roda num thread à parte
-@router.post("/extratos", dependencies=[Depends(limita_importacao)])
-def envia_extrato(
-    arquivo: Annotated[UploadFile, File(description="Extrato em PDF ou CSV")],
-    usuario: Annotated[Usuario, Depends(usuario_atual)],
-    db: Annotated[Banco, Depends(banco)],
-    pseudonimo: Annotated[str, Form(alias="usuario", description="Pseudônimo uNN")] = USUARIO_PADRAO,
-) -> ResultadoImportacao:
-    if not re.fullmatch(r"u\d{2}", pseudonimo):
+# `def` (not `async def`): the extraction is heavy and blocking; FastAPI runs it in a separate thread
+@router.post("/extratos", dependencies=[Depends(limit_import)])
+def upload_statement(
+    file: Annotated[UploadFile, File(alias="arquivo", description="Extrato em PDF ou CSV")],
+    user: Annotated[User, Depends(current_user)],
+    db: Annotated[Database, Depends(database)],
+    pseudonym: Annotated[str, Form(alias="usuario", description="Pseudônimo uNN")] = DEFAULT_PSEUDONYM,
+) -> ImportResult:
+    if not re.fullmatch(r"u\d{2}", pseudonym):
         raise HTTPException(400, "usuário deve ser 'u' + 2 dígitos (ex.: u07)")
 
-    nome = PurePath(arquivo.filename or "")
-    extensao = nome.suffix.lower()
-    if extensao not in EXTENSOES_ACEITAS:
+    name = PurePath(file.filename or "")
+    extension = name.suffix.lower()
+    if extension not in ACCEPTED_EXTENSIONS:
         raise HTTPException(400, "formato não aceito: envie um arquivo .pdf ou .csv")
 
-    conteudo = arquivo.file.read(TAMANHO_MAXIMO + 1)
-    if len(conteudo) > TAMANHO_MAXIMO:
+    content = file.file.read(MAX_SIZE + 1)
+    if len(content) > MAX_SIZE:
         raise HTTPException(400, "arquivo maior que 10 MB")
-    if not conteudo:
+    if not content:
         raise HTTPException(400, "arquivo vazio")
 
     try:
-        resultado = processa_extrato(conteudo, extensao, pseudonimo)
-    except VazamentoNaSaida:
+        result = process_statement(content, extension, pseudonym)
+    except OutputLeak:
         raise HTTPException(
             422, "possível dado pessoal detectado na saída: nenhuma transação foi devolvida"
         ) from None
 
-    resultado = categoriza(resultado)
+    result = categorize(result)
 
-    gravacao = None
-    if resultado.relatorio.status == "aceito" and resultado.transacoes:
-        db.garante_usuario(usuario.id, usuario.email, usuario.nome)
+    summary = None
+    if result.relatorio.status == "aceito" and result.transacoes:
+        db.ensure_user(user.id, user.email, user.name)
         try:
-            g = db.grava_extrato(
-                usuario.id,
-                nome_arquivo=nome.name[:200],
-                hash_arquivo=hashlib.sha256(conteudo).hexdigest(),
-                parser=resultado.relatorio.parser,
-                periodo_inicio=_data_ou_none(resultado.relatorio.periodo_inicio),
-                periodo_fim=_data_ou_none(resultado.relatorio.periodo_fim),
-                transacoes=[_para_gravar(t) for t in resultado.transacoes],
+            saved = db.save_statement(
+                user.id,
+                nome_arquivo=name.name[:200],
+                hash_arquivo=hashlib.sha256(content).hexdigest(),
+                parser=result.relatorio.parser,
+                periodo_inicio=_date_or_none(result.relatorio.periodo_inicio),
+                periodo_fim=_date_or_none(result.relatorio.periodo_fim),
+                transactions=[_to_save(t) for t in result.transacoes],
             )
-        except ExtratoRepetido:
+        except DuplicateStatement:
             raise HTTPException(409, "este arquivo já foi importado") from None
-        except cipher.ChaveInvalida as exc:
+        except cipher.InvalidKey as exc:
             raise HTTPException(500, str(exc)) from None
-        gravacao = Gravacao(extrato_id=g.extrato_id, gravadas=g.gravadas, repetidas=g.repetidas)
-    return ResultadoImportacao(**resultado.model_dump(), gravacao=gravacao)
+        summary = SaveSummary(extrato_id=saved.statement_id, gravadas=saved.saved, repetidas=saved.duplicates)
+    return ImportResult(**result.model_dump(), gravacao=summary)
 
 
 @router.get("/extratos")
-def lista_extratos(
-    usuario: Annotated[Usuario, Depends(usuario_atual)], db: Annotated[Banco, Depends(banco)]
-) -> list[ExtratoEnviado]:
-    return [ExtratoEnviado(**e) for e in db.lista_extratos(usuario.id)]
+def list_statements(
+    user: Annotated[User, Depends(current_user)], db: Annotated[Database, Depends(database)]
+) -> list[UploadedStatement]:
+    return [UploadedStatement(**e) for e in db.list_statements(user.id)]
 
 
 @router.delete("/extratos/{extrato_id}", status_code=204)
-def apaga_extrato(
-    extrato_id: UUID, usuario: Annotated[Usuario, Depends(usuario_atual)], db: Annotated[Banco, Depends(banco)]
+def delete_statement(
+    statement_id: Annotated[UUID, Path(alias="extrato_id")],
+    user: Annotated[User, Depends(current_user)],
+    db: Annotated[Database, Depends(database)],
 ) -> Response:
-    if not db.apaga_extrato(usuario.id, extrato_id):
+    if not db.delete_statement(user.id, statement_id):
         raise HTTPException(404, "extrato não encontrado")
     return Response(status_code=204)

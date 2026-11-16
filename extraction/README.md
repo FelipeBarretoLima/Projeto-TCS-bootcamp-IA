@@ -14,7 +14,7 @@ arquivo é conferido contra os totais que o próprio documento declara antes de 
 Com o venv ativo, na raiz do projeto:
 
 ```bash
-python -m statement extrair --entrada data/raw/<pasta> --usuario u07 --saida data/saida/u07.csv
+python -m statement extrair --entrada data/raw/<pasta> --usuario u07 --saida data/output/u07.csv
 ```
 
 Para processar todas as pastas de uma vez e gerar o CSV geral:
@@ -24,12 +24,12 @@ python -m statement tudo
 ```
 
 Cada subpasta de `data/raw/` é um usuário, com o número da pasta como pseudônimo (`data/raw/7` → `u07`).
-Grava `data/saida/uNN.csv` para cada usuário e `data/saida/transacoes.csv` com tudo junto. O nome
+Grava `data/output/uNN.csv` para cada usuário e `data/output/transacoes.csv` com tudo junto. O nome
 do titular de qualquer pasta é removido das outras e conferido de novo no CSV geral.
 
-Cada execução gera também `data/saida/uNN.relatorio.csv` (só contagens por arquivo).
-Linhas ambíguas vão para `data/privado/revisar.csv` e históricos fora do mapa de um parser
-para `data/privado/historicos_desconhecidos.csv`. Os dois ficam fora do git.
+Cada execução gera também `data/output/uNN.relatorio.csv` (só contagens por arquivo).
+Linhas ambíguas vão para `data/private/revisar.csv` e históricos fora do mapa de um parser
+para `data/private/historicos_desconhecidos.csv`. Os dois ficam fora do git.
 
 Código de saída: `0` tudo aceito, `1` algum arquivo rejeitado, `2` gravação bloqueada por
 possível vazamento de dado pessoal, `3` argumento inválido.

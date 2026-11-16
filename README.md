@@ -21,7 +21,7 @@ e [frontend/README.md](frontend/README.md).
 Fluxo pela linha de comando:
 
 ```
-data/raw/  --(python -m statement tudo)-->  data/saida/transacoes.csv  --(ml)-->  CSV + categoria
+data/raw/  --(python -m statement tudo)-->  data/output/transacoes.csv  --(ml)-->  CSV + categoria
 ```
 
 Fluxo pela página:
@@ -106,7 +106,7 @@ Abra http://localhost:5173, crie uma conta, importe um extrato e converse com o 
 dashboard. O frontend precisa de **Node.js 22** (ou 20.19+). Antes da primeira vez, preencha o
 `.env` (acima) e crie as tabelas (abaixo). Depois de mudar o `.env`, reinicie a API.
 
-A API lê (sem gravar) os mapas de `data/privado/` só para anonimizar. A categoria vem de duas
+A API lê (sem gravar) os mapas de `data/private/` só para anonimizar. A categoria vem de duas
 formas: toda **entrada** (dinheiro recebido) é `receitas`, por regra; toda **saída** é classificada
 pelo modelo `ml/modelos/svm_tfidf.pkl` (gerado por `python -m ml.train`). Sem o `.pkl`, as saídas
 ficam sem categoria. As regras fixas e o mapa de estabelecimentos só geram os rótulos do treino

@@ -1,53 +1,55 @@
-"""Mensagem de voz do chat: o Gemini transforma o áudio em texto.
+"""Chat voice message: Gemini turns the audio into text.
 
-O áudio só passa por aqui (vai ao Gemini e é descartado); o que fica salvo é a pergunta em texto,
-depois que o usuário confere e envia pelo chat normal. Usa os mesmos modelos do assistente
-(principal + reservas), tentados em ordem se um falhar.
+The audio only passes through here (it goes to Gemini and is discarded); what gets saved is the
+question in text, after the user checks it and sends it through the normal chat. It uses the same
+models as the assistant (primary + fallbacks), tried in order if one fails.
+
+The instruction sent to Gemini stays in Portuguese, like the assistant prompt.
 """
 
 from __future__ import annotations
 
 from langchain_core.messages import HumanMessage
 
-from .assistant import Modelos
+from .assistant import Models
 
-SEM_FALA = "[sem fala]"
+NO_SPEECH = "[sem fala]"
 
-INSTRUCAO = (
+INSTRUCTION = (
     "Transcreva fielmente a fala deste áudio, em português do Brasil. "
     "Responda somente com o texto falado: sem comentários, sem aspas e sem responder ao que foi dito. "
     "Escreva números e valores como algarismos (ex.: 'R$ 50', '3 meses'). "
-    f"Se não houver nenhuma fala compreensível, responda exatamente {SEM_FALA}"
+    f"Se não houver nenhuma fala compreensível, responda exatamente {NO_SPEECH}"
 )
 
 
-class SemFala(Exception):
-    """O áudio não tem fala que dê para transcrever (silêncio, ruído...)."""
+class NoSpeech(Exception):
+    """The audio has no speech that can be transcribed (silence, noise...)."""
 
 
-def _texto(saida) -> str:
-    texto = saida.text if hasattr(saida, "text") else str(saida.content)
-    return texto.strip().strip('"“”').strip()
+def _text(output) -> str:
+    text = output.text if hasattr(output, "text") else str(output.content)
+    return text.strip().strip('"“”').strip()
 
 
-def transcreve(modelo, audio: bytes, mime_type: str) -> str:
-    """Texto falado no áudio. `modelo`: um chat model do LangChain ou `Modelos` (principal + reservas).
+def transcribe(model, audio: bytes, mime_type: str) -> str:
+    """Text spoken in the audio. `model`: a LangChain chat model or `Models` (primary + fallbacks).
 
-    SemFala se não houver fala; a última exceção do Gemini se todos os modelos falharem."""
-    principal, reservas = (modelo.principal, modelo.reservas) if isinstance(modelo, Modelos) else (modelo, ())
-    mensagem = HumanMessage(content=[
-        {"type": "text", "text": INSTRUCAO},
+    NoSpeech if there is no speech; the last Gemini exception if every model fails."""
+    primary, fallbacks = (model.primary, model.fallbacks) if isinstance(model, Models) else (model, ())
+    message = HumanMessage(content=[
+        {"type": "text", "text": INSTRUCTION},
         {"type": "media", "data": audio, "mime_type": mime_type},
     ])
-    ultimo_erro: Exception | None = None
-    for candidato in (principal, *reservas):
+    last_error: Exception | None = None
+    for candidate in (primary, *fallbacks):
         try:
-            texto = _texto(candidato.invoke([mensagem]))
-        except Exception as erro:  # 503, demora, cota...: tenta o próximo modelo
-            ultimo_erro = erro
+            text = _text(candidate.invoke([message]))
+        except Exception as error:  # 503, timeout, quota...: tries the next model
+            last_error = error
             continue
-        if not texto or SEM_FALA in texto:
-            raise SemFala
-        return texto
-    assert ultimo_erro is not None
-    raise ultimo_erro
+        if not text or NO_SPEECH in text:
+            raise NoSpeech
+        return text
+    assert last_error is not None
+    raise last_error

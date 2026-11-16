@@ -1,79 +1,79 @@
-"""Mensagem de voz: a rota /chat/transcricao. O Gemini é trocado por um falso (nenhuma chamada externa)."""
+"""Voice message: the /chat/transcricao route. Gemini is replaced by a fake (no external call)."""
 
 import pytest
 from fastapi.testclient import TestClient
 
-from agent.transcription import SemFala
-from api.dependencies import modelo_do_assistente
+from agent.transcription import NoSpeech
+from api.dependencies import assistant_model
 from api.main import app
-from api.routes import assistant as rota
-from api.tests.fakes import USUARIO
+from api.routes import assistant as route
+from api.tests.fakes import USER
 
-AUDIO = b"\x1aE\xdf\xa3" + b"0" * 2000  # bytes quaisquer: a transcrição é falsa
+AUDIO = b"\x1aE\xdf\xa3" + b"0" * 2000  # any bytes: the transcription is fake
 
 
 @pytest.fixture
-def transcricoes(monkeypatch):
-    feitas = []
+def transcriptions(monkeypatch):
+    made = []
 
-    def transcreve_falso(modelo, audio, mime_type):
-        feitas.append({"bytes": len(audio), "mime_type": mime_type})
+    def fake_transcribe(model, audio, mime_type):
+        made.append({"bytes": len(audio), "mime_type": mime_type})
         return "quanto gastei de mercado?"
 
-    app.dependency_overrides[modelo_do_assistente] = lambda: object()
-    monkeypatch.setattr(rota, "transcreve", transcreve_falso)
-    return feitas
+    app.dependency_overrides[assistant_model] = lambda: object()
+    monkeypatch.setattr(route, "transcribe", fake_transcribe)
+    return made
 
 
-def _envia(conteudo=AUDIO, tipo="audio/webm;codecs=opus"):
-    return TestClient(app).post("/api/chat/transcricao", files={"audio": ("voz.webm", conteudo, tipo)})
+def _send(content=AUDIO, kind="audio/webm;codecs=opus"):
+    return TestClient(app).post("/api/chat/transcricao", files={"audio": ("voz.webm", content, kind)})
 
 
-def test_transcreve_e_nao_grava_nada(db, transcricoes):
-    r = _envia()
+def test_transcribes_and_saves_nothing(db, transcriptions):
+    r = _send()
     assert r.status_code == 200 and r.json() == {"texto": "quanto gastei de mercado?"}
-    # o codec sai do tipo: o Gemini recebe só "audio/webm"
-    assert transcricoes == [{"bytes": len(AUDIO), "mime_type": "audio/webm"}]
-    assert db.lista_conversas(USUARIO.id) == []  # transcrever não cria conversa nem mensagem
+    # the codec is dropped from the type: Gemini receives only "audio/webm"
+    assert transcriptions == [{"bytes": len(AUDIO), "mime_type": "audio/webm"}]
+    assert db.list_conversations(USER.id) == []  # transcribing creates no conversation nor message
 
 
-def test_aceita_o_audio_do_iphone(transcricoes):
-    assert _envia(tipo="audio/mp4").status_code == 200
-    assert transcricoes[-1]["mime_type"] == "audio/mp4"
+def test_accepts_the_iphone_audio(transcriptions):
+    assert _send(kind="audio/mp4").status_code == 200
+    assert transcriptions[-1]["mime_type"] == "audio/mp4"
 
 
-def test_recusa_o_que_nao_e_audio(transcricoes):
-    r = _envia(b"%PDF-1.7", "application/pdf")
-    assert r.status_code == 415 and transcricoes == []
+def test_refuses_what_is_not_audio(transcriptions):
+    r = _send(b"%PDF-1.7", "application/pdf")
+    assert r.status_code == 415 and transcriptions == []
 
 
-def test_recusa_audio_grande_demais(transcricoes):
-    r = _envia(b"0" * (rota.TAMANHO_MAXIMO_AUDIO + 1))
-    assert r.status_code == 413 and transcricoes == []
+def test_refuses_audio_too_large(transcriptions):
+    r = _send(b"0" * (route.MAX_AUDIO_SIZE + 1))
+    assert r.status_code == 413 and transcriptions == []
 
 
-def test_recusa_gravacao_vazia(transcricoes):
-    assert _envia(b"").status_code == 400 and transcricoes == []
+def test_refuses_empty_recording(transcriptions):
+    assert _send(b"").status_code == 400 and transcriptions == []
 
 
-def test_sem_fala_no_audio(monkeypatch, transcricoes):
-    def sem_fala(*_):
-        raise SemFala
+def test_no_speech_in_the_audio(monkeypatch, transcriptions):
+    def no_speech(*_):
+        raise NoSpeech
 
-    monkeypatch.setattr(rota, "transcreve", sem_fala)
-    r = _envia()
+    monkeypatch.setattr(route, "transcribe", no_speech)
+    r = _send()
     assert r.status_code == 422 and "fala" in r.json()["detail"]
 
 
-def test_falha_do_gemini_vira_502(monkeypatch, transcricoes):
-    def falha(*_):
+def test_gemini_failure_becomes_502(monkeypatch, transcriptions):
+    def fails(*_):
         raise RuntimeError("503 high demand")
 
-    monkeypatch.setattr(rota, "transcreve", falha)
-    assert _envia().status_code == 502
+    monkeypatch.setattr(route, "transcribe", fails)
+    assert _send().status_code == 502
 
 
-def test_limite_de_mensagens_de_voz(transcricoes):
+def test_voice_message_limit(transcriptions):
     for _ in range(10):
-        assert _envia().status_code == 200
-    assert _envia().status_code == 429
+        assert _send().status_code == 200
+    assert _send().status_code == 429
