@@ -33,8 +33,14 @@ type Estado = { fase: 'carregando' } | Resposta
 
 const SEM_CATEGORIA = 'sem_categoria'
 
-// os filtros da última visita (a aba do cabeçalho abre /extrato sem eles)
-const CHAVE_FILTROS = 'tas:filtros-extrato'
+/** Atalho de período escolhido (?atalho=). Fica na URL porque pelas datas não dá para saber:
+ *  com menos de 6 meses de transações, "Últimos 6 meses" e "Todo o período" dão o mesmo intervalo. */
+const ATALHO_SEIS_MESES = '6meses'
+const ATALHO_TUDO = 'tudo'
+
+// os filtros da última visita (a aba do cabeçalho abre /extrato sem eles); v2: com o ?atalho=
+// (os guardados antes dele não diziam qual botão estava ligado, então são ignorados)
+const CHAVE_FILTROS = 'tas:filtros-extrato:v2'
 
 /** Filtros guardados junto com a última transação que existia quando foram usados. */
 type FiltrosGuardados = { busca: string; ultima: string | null }
@@ -64,12 +70,13 @@ function mensagemDe(e: unknown, padrao: string): string {
 
 /** Aba Extrato: as transações salvas na conta, com filtro de período e categoria.
  *  Padrão: os últimos 6 meses (até o mês da transação mais recente, como no dashboard).
- *  Os filtros ficam na URL (?inicio=&fim=&categoria=) e são lembrados ao trocar de aba. */
+ *  Os filtros ficam na URL (?inicio=&fim=&categoria=&atalho=) e são lembrados ao trocar de aba. */
 export function PaginaExtrato() {
   const [params, setParams] = useSearchParams()
   const inicio = params.get('inicio') ?? ''
   const fim = params.get('fim') ?? ''
   const categoria = params.get('categoria') ?? ''
+  const atalho = params.get('atalho') ?? ''
   const textoBusca = params.get('busca') ?? ''
   const periodoInvertido = Boolean(inicio && fim && inicio > fim)
 
@@ -86,7 +93,7 @@ export function PaginaExtrato() {
         const salvos = filtrosSalvos(p.ultima)
         if (salvos !== null) setParams(new URLSearchParams(salvos), { replace: true })
         else if (p.padrao_inicio && p.padrao_fim)
-          setParams({ inicio: p.padrao_inicio, fim: p.padrao_fim }, { replace: true })
+          setParams({ inicio: p.padrao_inicio, fim: p.padrao_fim, atalho: ATALHO_SEIS_MESES }, { replace: true })
       })
       .catch((e) => setErroPeriodo(mensagemDe(e, 'Não foi possível carregar o extrato.')))
   }, [setParams])
@@ -150,7 +157,7 @@ export function PaginaExtrato() {
     }
   }
 
-  function muda(novos: { inicio?: string; fim?: string; categoria?: string; busca?: string }) {
+  function muda(novos: { inicio?: string; fim?: string; categoria?: string; busca?: string; atalho?: string }) {
     setParams(
       (anteriores) => {
         const p = new URLSearchParams(anteriores)
@@ -165,8 +172,9 @@ export function PaginaExtrato() {
   }
 
   const temDados = Boolean(periodo?.ultima)
-  const eSeisMeses = temDados && inicio === periodo?.padrao_inicio && fim === periodo?.padrao_fim
-  const eTudo = temDados && ((inicio === periodo?.primeira && fim === periodo?.ultima) || (!inicio && !fim))
+  // um atalho por vez; data escolhida à mão no calendário desliga os dois
+  const eSeisMeses = temDados && atalho === ATALHO_SEIS_MESES
+  const eTudo = temDados && atalho === ATALHO_TUDO
 
   const termo = normaliza(textoBusca.trim())
   const doPeriodo = estado.fase === 'pronto' ? estado.transacoes : []
@@ -215,7 +223,10 @@ export function PaginaExtrato() {
             className={estilos.atalho}
             aria-pressed={eSeisMeses}
             disabled={!periodo}
-            onClick={() => periodo && muda({ inicio: periodo.padrao_inicio ?? '', fim: periodo.padrao_fim ?? '' })}
+            onClick={() =>
+              periodo &&
+              muda({ inicio: periodo.padrao_inicio ?? '', fim: periodo.padrao_fim ?? '', atalho: ATALHO_SEIS_MESES })
+            }
           >
             Últimos 6 meses
           </button>
@@ -224,7 +235,9 @@ export function PaginaExtrato() {
             className={estilos.atalho}
             aria-pressed={eTudo}
             disabled={!periodo}
-            onClick={() => periodo && muda({ inicio: periodo.primeira ?? '', fim: periodo.ultima ?? '' })}
+            onClick={() =>
+              periodo && muda({ inicio: periodo.primeira ?? '', fim: periodo.ultima ?? '', atalho: ATALHO_TUDO })
+            }
           >
             Todo o período
           </button>
@@ -235,7 +248,7 @@ export function PaginaExtrato() {
             rotulo="De"
             valor={inicio}
             max={fim || undefined}
-            onChange={(v) => muda({ inicio: v })}
+            onChange={(v) => muda({ inicio: v, atalho: '' })}
             primeiraDisponivel={periodo?.primeira}
             ultimaDisponivel={periodo?.ultima}
           />
@@ -243,7 +256,7 @@ export function PaginaExtrato() {
             rotulo="Até"
             valor={fim}
             min={inicio || undefined}
-            onChange={(v) => muda({ fim: v })}
+            onChange={(v) => muda({ fim: v, atalho: '' })}
             primeiraDisponivel={periodo?.primeira}
             ultimaDisponivel={periodo?.ultima}
           />
