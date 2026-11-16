@@ -1,5 +1,5 @@
-"""Limite de uso por usuário (em memória): protege o Gemini e o processamento de extratos de
-cliques repetidos ou scripts. Cada processo da API tem a sua contagem; reinicia junto com ela."""
+"""Per-user usage limit (in memory): protects Gemini and statement processing from repeated
+clicks or scripts. Each API process has its own count; it restarts along with it."""
 
 from __future__ import annotations
 
@@ -10,39 +10,39 @@ from typing import Annotated
 
 from fastapi import Depends, HTTPException
 
-from .auth import Usuario, usuario_atual
+from .auth import User, current_user
 
 
-class Limite:
-    def __init__(self, maximo: int, janela_segundos: float, acao: str):
-        self.maximo, self.janela, self.acao = maximo, janela_segundos, acao
-        self._usos: defaultdict[str, deque[float]] = defaultdict(deque)
-        self._trava = Lock()
+class RateLimit:
+    def __init__(self, max_uses: int, window_seconds: float, action: str):
+        self.max_uses, self.window, self.action = max_uses, window_seconds, action
+        self._uses: defaultdict[str, deque[float]] = defaultdict(deque)
+        self._lock = Lock()
 
-    def confere(self, chave: str) -> None:
-        """Conta um uso; 429 se a chave já usou o máximo dentro da janela."""
-        agora = time.monotonic()
-        with self._trava:
-            usos = self._usos[chave]
-            while usos and usos[0] <= agora - self.janela:
-                usos.popleft()
-            if len(usos) >= self.maximo:
-                espera = int(usos[0] + self.janela - agora) + 1
-                raise HTTPException(429, f"muitas {self.acao} seguidas: espere {espera} s e tente de novo")
-            usos.append(agora)
+    def check(self, key: str) -> None:
+        """Counts one use; 429 if the key already used the maximum within the window."""
+        now = time.monotonic()
+        with self._lock:
+            uses = self._uses[key]
+            while uses and uses[0] <= now - self.window:
+                uses.popleft()
+            if len(uses) >= self.max_uses:
+                wait = int(uses[0] + self.window - now) + 1
+                raise HTTPException(429, f"muitas {self.action} seguidas: espere {wait} s e tente de novo")
+            uses.append(now)
 
-    def zera(self) -> None:
-        with self._trava:
-            self._usos.clear()
-
-
-LIMITE_CHAT = Limite(10, 60, "perguntas")  # 10 perguntas por minuto
-LIMITE_IMPORTACAO = Limite(20, 600, "importações")  # 20 extratos a cada 10 minutos
+    def reset(self) -> None:
+        with self._lock:
+            self._uses.clear()
 
 
-def limita_chat(usuario: Annotated[Usuario, Depends(usuario_atual)]) -> None:
-    LIMITE_CHAT.confere(str(usuario.id))
+CHAT_LIMIT = RateLimit(10, 60, "perguntas")  # 10 questions per minute
+IMPORT_LIMIT = RateLimit(20, 600, "importações")  # 20 statements every 10 minutes
 
 
-def limita_importacao(usuario: Annotated[Usuario, Depends(usuario_atual)]) -> None:
-    LIMITE_IMPORTACAO.confere(str(usuario.id))
+def limit_chat(user: Annotated[User, Depends(current_user)]) -> None:
+    CHAT_LIMIT.check(str(user.id))
+
+
+def limit_import(user: Annotated[User, Depends(current_user)]) -> None:
+    IMPORT_LIMIT.check(str(user.id))

@@ -1,121 +1,125 @@
-"""Dashboard e chat do Assistente TAS."""
+"""Dashboard and chat of the TAS Assistant."""
 
 import logging
 import re
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Response
+from fastapi import APIRouter, Depends, HTTPException, Path, Query, Response
 
 from agent import queries
-from agent.assistant import responde
-from database.repository import Banco, ConversaApagada
+from agent.assistant import answer
+from database.repository import Database, ConversationDeleted
 
-from ..auth import Usuario, usuario_atual
-from ..dependencies import AbreBanco, abre_banco, banco, modelo_do_assistente
-from ..schemas import Conversa, Mensagem, NovoTitulo, Painel, Pergunta, RespostaChat
-from ..rate_limit import limita_chat
+from ..auth import User, current_user
+from ..dependencies import OpenDatabase, assistant_model, database, open_database
+from ..schemas import ChatAnswer, Conversation, Dashboard, Message, NewTitle, Question
+from ..rate_limit import limit_chat
 
 router = APIRouter(tags=["assistente"])
 log = logging.getLogger(__name__)
 
-TAMANHO_TITULO = 60
+TITLE_LENGTH = 60
 
 
 @router.get("/painel")
-def painel(
-    usuario: Annotated[Usuario, Depends(usuario_atual)],
-    db: Annotated[Banco, Depends(banco)],
-    mes: Annotated[str | None, Query(description="Mês dos cartões, AAAA-MM (padrão: o mais recente)")] = None,
-) -> Painel:
-    """Cartões de um mês e receitas x despesas dos 6 meses até ele."""
-    if mes is not None and not re.fullmatch(r"\d{4}-(0[1-9]|1[0-2])", mes):
+def dashboard(
+    user: Annotated[User, Depends(current_user)],
+    db: Annotated[Database, Depends(database)],
+    month: Annotated[str | None, Query(alias="mes", description="Mês dos cartões, AAAA-MM (padrão: o mais recente)")] = None,
+) -> Dashboard:
+    """Cards of one month and income vs expenses of the 6 months up to it."""
+    if month is not None and not re.fullmatch(r"\d{4}-(0[1-9]|1[0-2])", month):
         raise HTTPException(400, "mês inválido: use AAAA-MM (ex.: 2024-03)")
-    return Painel(**queries.painel(queries.tabela(db.transacoes(usuario.id)), mes))
+    return Dashboard(**queries.dashboard(queries.to_dataframe(db.transactions(user.id)), month))
 
 
 @router.get("/conversas")
-def lista_conversas(
-    usuario: Annotated[Usuario, Depends(usuario_atual)], db: Annotated[Banco, Depends(banco)]
-) -> list[Conversa]:
-    return [Conversa(**c) for c in db.lista_conversas(usuario.id)]
+def list_conversations(
+    user: Annotated[User, Depends(current_user)], db: Annotated[Database, Depends(database)]
+) -> list[Conversation]:
+    return [Conversation(**c) for c in db.list_conversations(user.id)]
 
 
 @router.get("/conversas/{conversa_id}/mensagens")
-def mensagens(
-    conversa_id: UUID, usuario: Annotated[Usuario, Depends(usuario_atual)], db: Annotated[Banco, Depends(banco)]
-) -> list[Mensagem]:
-    if not db.conversa_e_do_usuario(usuario.id, conversa_id):
+def messages(
+    conversation_id: Annotated[UUID, Path(alias="conversa_id")],
+    user: Annotated[User, Depends(current_user)],
+    db: Annotated[Database, Depends(database)],
+) -> list[Message]:
+    if not db.conversation_belongs_to_user(user.id, conversation_id):
         raise HTTPException(404, "conversa não encontrada")
-    return [Mensagem(**m) for m in db.mensagens(conversa_id)]
+    return [Message(**m) for m in db.messages(conversation_id)]
 
 
 @router.patch("/conversas/{conversa_id}", status_code=204)
-def renomeia_conversa(
-    conversa_id: UUID,
-    novo: NovoTitulo,
-    usuario: Annotated[Usuario, Depends(usuario_atual)],
-    db: Annotated[Banco, Depends(banco)],
+def rename_conversation(
+    conversation_id: Annotated[UUID, Path(alias="conversa_id")],
+    new: NewTitle,
+    user: Annotated[User, Depends(current_user)],
+    db: Annotated[Database, Depends(database)],
 ) -> Response:
-    titulo = novo.titulo.strip()
-    if not titulo:
+    title = new.titulo.strip()
+    if not title:
         raise HTTPException(400, "o nome da conversa não pode ficar vazio")
-    if not db.renomeia_conversa(usuario.id, conversa_id, titulo):
+    if not db.rename_conversation(user.id, conversation_id, title):
         raise HTTPException(404, "conversa não encontrada")
     return Response(status_code=204)
 
 
 @router.delete("/conversas/{conversa_id}", status_code=204)
-def apaga_conversa(
-    conversa_id: UUID, usuario: Annotated[Usuario, Depends(usuario_atual)], db: Annotated[Banco, Depends(banco)]
+def delete_conversation(
+    conversation_id: Annotated[UUID, Path(alias="conversa_id")],
+    user: Annotated[User, Depends(current_user)],
+    db: Annotated[Database, Depends(database)],
 ) -> Response:
-    if not db.apaga_conversa(usuario.id, conversa_id):
+    if not db.delete_conversation(user.id, conversation_id):
         raise HTTPException(404, "conversa não encontrada")
     return Response(status_code=204)
 
 
-@router.post("/chat", dependencies=[Depends(limita_chat)])
+@router.post("/chat", dependencies=[Depends(limit_chat)])
 def chat(
-    pergunta: Pergunta,
-    usuario: Annotated[Usuario, Depends(usuario_atual)],
-    abre: Annotated[AbreBanco, Depends(abre_banco)],
-    modelo=Depends(modelo_do_assistente),
-) -> RespostaChat:
-    """Três fases, para não prender uma conexão do pool enquanto o LLM responde (de 2 a 30 s ou
-    mais): com a conexão presa, 5 perguntas lentas esgotavam o pool e todas as outras rotas
-    falhavam."""
-    texto = pergunta.mensagem.strip()
-    if not texto:
+    question: Question,
+    user: Annotated[User, Depends(current_user)],
+    open_db: Annotated[OpenDatabase, Depends(open_database)],
+    model=Depends(assistant_model),
+) -> ChatAnswer:
+    """Three phases, so a pool connection is not held while the LLM answers (from 2 to 30 s or
+    more): with the connection held, 5 slow questions exhausted the pool and every other route
+    failed."""
+    text = question.mensagem.strip()
+    if not text:
         raise HTTPException(400, "mensagem vazia")
 
-    # 1) lê o que o assistente precisa e devolve a conexão ao pool
-    with abre() as db:
-        historico = []
-        if pergunta.conversa_id is not None:
-            if not db.conversa_e_do_usuario(usuario.id, pergunta.conversa_id):
+    # 1) reads what the assistant needs and gives the connection back to the pool
+    with open_db() as db:
+        history = []
+        if question.conversa_id is not None:
+            if not db.conversation_belongs_to_user(user.id, question.conversa_id):
                 raise HTTPException(404, "conversa não encontrada")
-            historico = db.mensagens(pergunta.conversa_id)
-        df = queries.tabela(db.transacoes(usuario.id))
+            history = db.messages(question.conversa_id)
+        df = queries.to_dataframe(db.transactions(user.id))
 
-    # 2) o LLM, sem nenhuma conexão aberta
+    # 2) the LLM, with no connection open
     try:
-        resposta = responde(modelo, df, texto, historico)
+        reply = answer(model, df, text, history)
     except Exception:
-        # nada foi gravado ainda: o usuário pode tentar de novo
+        # nothing was saved yet: the user can try again
         log.exception("falha no assistente")
         raise HTTPException(502, "o assistente não conseguiu responder agora; tente de novo em instantes") from None
 
-    # 3) grava; a conversa nova só nasce se houve resposta
-    with abre() as db:
-        db.garante_usuario(usuario.id, usuario.email, usuario.nome)
-        if pergunta.conversa_id is None:
-            titulo = texto if len(texto) <= TAMANHO_TITULO else texto[: TAMANHO_TITULO - 1].rstrip() + "…"
-            conversa_id = db.cria_conversa(usuario.id, titulo)
+    # 3) saves; a new conversation is only created if there was an answer
+    with open_db() as db:
+        db.ensure_user(user.id, user.email, user.name)
+        if question.conversa_id is None:
+            title = text if len(text) <= TITLE_LENGTH else text[: TITLE_LENGTH - 1].rstrip() + "…"
+            conversation_id = db.create_conversation(user.id, title)
         else:
-            conversa_id = pergunta.conversa_id
+            conversation_id = question.conversa_id
         try:
-            m_pergunta = db.grava_mensagem(conversa_id, "usuario", texto)
-            m_resposta = db.grava_mensagem(conversa_id, "agente", resposta.texto, resposta.grafico)
-        except ConversaApagada:
+            question_msg = db.save_message(conversation_id, "usuario", text)
+            answer_msg = db.save_message(conversation_id, "agente", reply.text, reply.chart)
+        except ConversationDeleted:
             raise HTTPException(404, "a conversa foi apagada enquanto o assistente respondia") from None
-    return RespostaChat(conversa_id=conversa_id, pergunta=Mensagem(**m_pergunta), resposta=Mensagem(**m_resposta))
+    return ChatAnswer(conversa_id=conversation_id, pergunta=Message(**question_msg), resposta=Message(**answer_msg))

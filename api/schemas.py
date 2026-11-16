@@ -1,4 +1,8 @@
-"""Formato das respostas da API (contrato com o frontend)."""
+"""Shape of the API responses (contract with the frontend).
+
+Only the class names are in English: the fields become the JSON the frontend reads, so they stay
+in Portuguese.
+"""
 
 from datetime import date, datetime
 from decimal import Decimal
@@ -8,17 +12,17 @@ from uuid import UUID
 from pydantic import BaseModel, Field
 
 
-class Saude(BaseModel):
+class Health(BaseModel):
     status: str
 
 
-class ConfigPublica(BaseModel):
+class PublicConfig(BaseModel):
     supabase_url: str
     supabase_publishable_key: str
 
 
-class Relatorio(BaseModel):
-    """Resumo do processamento. Só contagens e códigos, nada do conteúdo do extrato."""
+class Report(BaseModel):
+    """Processing summary. Only counts and codes, nothing from the statement content."""
 
     status: str  # "aceito" | "rejeitado"
     motivo: str
@@ -33,25 +37,25 @@ class Relatorio(BaseModel):
     reconciliacao: str
 
 
-class Transacao(BaseModel):
-    """Uma linha já anonimizada e validada (mesmo contrato do CSV do parser)."""
+class Transaction(BaseModel):
+    """An already anonymized and validated row (same contract as the parser CSV)."""
 
     data: date
     historico: str
     contraparte: str
-    valor: Decimal  # vai no JSON como texto ("-12.34") para não perder precisão
+    valor: Decimal  # goes in the JSON as text ("-12.34") so no precision is lost
     tipo: str
     meio: str
     banco: str
-    categoria: str | None = None  # uma das 8 classes de ml/classes.py; None = sem categoria
+    categoria: str | None = None  # one of the 8 classes in ml/classes.py; None = uncategorized
     origem_categoria: Literal["regra", "mapa", "modelo"] | None = None
-    # como veio no extrato, sem anonimizar: só para mostrar ao dono (ML e chat usam os campos acima)
+    # as it came in the statement, not anonymized: only to show the owner (ML and chat use the fields above)
     historico_original: str | None = None
     contraparte_original: str | None = None
 
 
-class TransacaoSalva(BaseModel):
-    """Transação gravada na conta do usuário (aba Extrato). Não diz de onde veio a categoria."""
+class SavedTransaction(BaseModel):
+    """Transaction saved in the user's account (Extrato tab). It does not say where the category came from."""
 
     id: int
     data: date
@@ -62,39 +66,39 @@ class TransacaoSalva(BaseModel):
     meio: str
     banco: str
     categoria: str | None
-    # decifrados do banco; None = gravada sem chave ou com outra chave (mostra o anonimizado)
+    # decrypted from the database; None = saved without a key or with another key (shows the anonymized text)
     historico_original: str | None = None
     contraparte_original: str | None = None
 
 
-class PeriodoTransacoes(BaseModel):
-    """Datas das transações do usuário e o filtro padrão da aba Extrato (None = nenhuma transação)."""
+class TransactionPeriod(BaseModel):
+    """Dates of the user's transactions and the default filter of the Extrato tab (None = no transactions)."""
 
     primeira: date | None
     ultima: date | None
-    padrao_inicio: date | None  # início dos últimos 6 meses (ou a 1ª transação, se for depois)
-    padrao_fim: date | None  # a última transação
+    padrao_inicio: date | None  # start of the last 6 months (or the 1st transaction, if later)
+    padrao_fim: date | None  # the last transaction
 
 
-class ResultadoUpload(BaseModel):
-    relatorio: Relatorio
-    transacoes: list[Transacao]
+class UploadResult(BaseModel):
+    relatorio: Report
+    transacoes: list[Transaction]
     sem_categoria: int = 0
 
 
-class Gravacao(BaseModel):
-    """O que entrou no banco: as repetidas já estavam lá (extratos com períodos sobrepostos)."""
+class SaveSummary(BaseModel):
+    """What went into the database: the duplicates were already there (statements with overlapping periods)."""
 
     extrato_id: UUID
     gravadas: int
     repetidas: int
 
 
-class ResultadoImportacao(ResultadoUpload):
-    gravacao: Gravacao | None = None  # None = extrato rejeitado, nada gravado
+class ImportResult(UploadResult):
+    gravacao: SaveSummary | None = None  # None = statement rejected, nothing saved
 
 
-class ExtratoEnviado(BaseModel):
+class UploadedStatement(BaseModel):
     id: UUID
     nome_arquivo: str
     banco: str
@@ -105,8 +109,8 @@ class ExtratoEnviado(BaseModel):
     enviado_em: datetime
 
 
-class Grafico(BaseModel):
-    """Dados de um gráfico; o frontend desenha (ver agent/queries.py)."""
+class Chart(BaseModel):
+    """Data of a chart; the frontend draws it (see agent/queries.py)."""
 
     tipo: Literal["barras", "barras_horizontais", "linha", "pizza"]
     titulo: str
@@ -115,60 +119,60 @@ class Grafico(BaseModel):
     formato: str = "moeda"
 
 
-class MesDisponivel(BaseModel):
-    valor: str  # "AAAA-MM"
+class AvailableMonth(BaseModel):
+    valor: str  # "YYYY-MM"
     rotulo: str  # "mar/24"
 
 
-class Painel(BaseModel):
+class Dashboard(BaseModel):
     tem_dados: bool
     mes: str | None
-    mes_valor: str | None = None  # o mês mostrado, "AAAA-MM"
-    meses: list[MesDisponivel] = []  # meses com transações, do mais recente ao mais antigo
+    mes_valor: str | None = None  # the month shown, "YYYY-MM"
+    meses: list[AvailableMonth] = []  # months with transactions, from the most recent to the oldest
     receitas: float
     despesas: float
     saldo: float
-    grafico: Grafico | None
+    grafico: Chart | None
 
 
-class Conversa(BaseModel):
+class Conversation(BaseModel):
     id: UUID
     titulo: str
     criada_em: datetime
     atualizada_em: datetime
 
 
-class Mensagem(BaseModel):
+class Message(BaseModel):
     id: int
     papel: Literal["usuario", "agente"]
     texto: str
-    grafico: Grafico | None = None
+    grafico: Chart | None = None
     criada_em: datetime
 
 
-class Pergunta(BaseModel):
+class Question(BaseModel):
     mensagem: str = Field(min_length=1, max_length=1000)
-    conversa_id: UUID | None = None  # None = começa uma conversa nova
+    conversa_id: UUID | None = None  # None = starts a new conversation
 
 
-class RespostaChat(BaseModel):
+class ChatAnswer(BaseModel):
     conversa_id: UUID
-    pergunta: Mensagem
-    resposta: Mensagem
+    pergunta: Message
+    resposta: Message
 
 
-class NovaCategoria(BaseModel):
-    categoria: str | None  # uma das 8 categorias; None = sem categoria
+class NewCategory(BaseModel):
+    categoria: str | None  # one of the 8 categories; None = uncategorized
 
 
-class NovoTitulo(BaseModel):
+class NewTitle(BaseModel):
     titulo: str = Field(min_length=1, max_length=60)
 
 
-class NovoNome(BaseModel):
+class NewName(BaseModel):
     nome: str = Field(min_length=1, max_length=80)
 
 
-class Perfil(BaseModel):
+class Profile(BaseModel):
     nome: str
     email: str

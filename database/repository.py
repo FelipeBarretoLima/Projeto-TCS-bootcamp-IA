@@ -1,7 +1,7 @@
-"""Leitura e gravação no banco. Toda função recebe o id do usuário e filtra por ele.
+"""Database reads and writes. Every function receives the user id and filters by it.
 
-`Banco` envolve uma conexão aberta; quem abre a conexão decide o commit (na API, cada requisição
-é uma transação: deu erro, nada fica gravado).
+`Database` wraps an open connection; whoever opens the connection decides the commit (in the API,
+each request is one transaction: on error, nothing is saved).
 """
 
 from __future__ import annotations
@@ -17,133 +17,133 @@ from uuid import UUID
 import psycopg
 from psycopg.rows import dict_row
 
-from .deduplication import separa_novas_com_ids
+from .deduplication import split_new_with_ids
 
-COLUNAS_TRANSACAO = ("data", "historico", "contraparte", "valor", "tipo", "meio", "banco",
-                     "categoria", "origem_categoria")
-# texto original cifrado pela API (api/cipher.py); opcional em cada transação
-COLUNA_ORIGINAL = "original_cifrado"
-# campos anonimizados copiados da transação para public.correcoes (contrato do parser, sem id_usuario)
-_CAMPOS_DA_CORRECAO = ("data", "historico", "contraparte", "valor", "tipo", "meio", "banco")
-# chave fixa da trava (pg_advisory_xact_lock) que impede dois retreinos ao mesmo tempo
-_TRAVA_RETREINO = 7_242_001
-
-
-class ExtratoRepetido(Exception):
-    """O mesmo arquivo (mesmo hash) já foi enviado por este usuário."""
+TRANSACTION_COLUMNS = ("data", "historico", "contraparte", "valor", "tipo", "meio", "banco",
+                       "categoria", "origem_categoria")
+# original text encrypted by the API (api/cipher.py); optional in each transaction
+ORIGINAL_COLUMN = "original_cifrado"
+# anonymized fields copied from the transaction to public.correcoes (parser contract, without id_usuario)
+_CORRECTION_FIELDS = ("data", "historico", "contraparte", "valor", "tipo", "meio", "banco")
+# fixed lock key (pg_advisory_xact_lock) that prevents two retrainings at the same time
+_RETRAINING_LOCK = 7_242_001
 
 
-class ConversaApagada(Exception):
-    """A conversa foi apagada enquanto a resposta era gerada."""
+class DuplicateStatement(Exception):
+    """The same file (same hash) was already uploaded by this user."""
+
+
+class ConversationDeleted(Exception):
+    """The conversation was deleted while the answer was being generated."""
 
 
 @dataclass(frozen=True)
-class Gravacao:
-    extrato_id: UUID
-    gravadas: int
-    repetidas: int
+class SaveResult:
+    statement_id: UUID
+    saved: int
+    duplicates: int
 
 
-class Banco:
-    def __init__(self, conexao: psycopg.Connection):
-        self.con = conexao
+class Database:
+    def __init__(self, connection: psycopg.Connection):
+        self.con = connection
 
-    def confirma(self) -> None:
-        """Commit antes do fim da requisição (ex.: a correção precisa estar gravada antes do retreino)."""
+    def commit(self) -> None:
+        """Commit before the end of the request (e.g. the correction must be saved before the retraining)."""
         self.con.commit()
 
-    def _todas(self, sql: str, *args: Any) -> list[dict[str, Any]]:
+    def _all(self, sql: str, *args: Any) -> list[dict[str, Any]]:
         with self.con.cursor(row_factory=dict_row) as cur:
             return cur.execute(sql, args).fetchall()
 
-    def _uma(self, sql: str, *args: Any) -> dict[str, Any] | None:
+    def _one(self, sql: str, *args: Any) -> dict[str, Any] | None:
         with self.con.cursor(row_factory=dict_row) as cur:
             return cur.execute(sql, args).fetchone()
 
-    # --- usuários ---
+    # --- users ---
 
-    def garante_usuario(self, usuario_id: UUID, email: str, nome: str = "") -> None:
-        """O perfil nasce pelo gatilho do cadastro; isto cobre contas criadas antes das tabelas."""
+    def ensure_user(self, user_id: UUID, email: str, name: str = "") -> None:
+        """The profile is created by the sign-up trigger; this covers accounts created before the tables."""
         self.con.execute(
             "insert into public.usuarios (id, email, nome) values (%s, %s, %s) on conflict (id) do nothing",
-            (usuario_id, email, nome))
+            (user_id, email, name))
 
-    def perfil(self, usuario_id: UUID) -> dict[str, Any] | None:
-        return self._uma("select id, nome, email, criado_em from public.usuarios where id = %s", usuario_id)
+    def profile(self, user_id: UUID) -> dict[str, Any] | None:
+        return self._one("select id, nome, email, criado_em from public.usuarios where id = %s", user_id)
 
-    def muda_nome(self, usuario_id: UUID, nome: str) -> None:
-        self.con.execute("update public.usuarios set nome = %s where id = %s", (nome, usuario_id))
+    def rename_user(self, user_id: UUID, name: str) -> None:
+        self.con.execute("update public.usuarios set nome = %s where id = %s", (name, user_id))
 
-    def apaga_conta(self, usuario_id: UUID) -> None:
-        """Apaga o login no Supabase Auth; perfil, extratos, transações e conversas vão em cascata."""
-        self.con.execute("delete from auth.users where id = %s", (usuario_id,))
+    def delete_account(self, user_id: UUID) -> None:
+        """Deletes the login in Supabase Auth; profile, statements, transactions and conversations cascade."""
+        self.con.execute("delete from auth.users where id = %s", (user_id,))
 
-    # --- extratos e transações ---
+    # --- statements and transactions ---
 
-    def grava_extrato(self, usuario_id: UUID, *, nome_arquivo: str, hash_arquivo: str, parser: str,
-                      periodo_inicio: date | None, periodo_fim: date | None,
-                      transacoes: list[dict[str, Any]]) -> Gravacao:
-        """Grava o extrato e só as transações que ainda não estão no banco (ver deduplicacao.py)."""
-        # Importações do mesmo usuário em fila até o commit: sem isto, dois extratos sobrepostos
-        # enviados ao mesmo tempo liam o banco antes de o outro gravar e as repetidas entravam duas
-        # vezes. A trava sai sozinha no fim da transação; usuários diferentes não esperam um pelo outro.
-        self.con.execute("select pg_advisory_xact_lock(hashtextextended(%s::text, 0))", (str(usuario_id),))
-        if self._uma("select 1 from public.extratos where usuario_id = %s and hash_arquivo = %s",
-                     usuario_id, hash_arquivo):
-            raise ExtratoRepetido
-        existentes: list[dict[str, Any]] = []
-        if transacoes:
-            datas = [t["data"] for t in transacoes]
-            existentes = self._todas(
+    def save_statement(self, user_id: UUID, *, nome_arquivo: str, hash_arquivo: str, parser: str,
+                       periodo_inicio: date | None, periodo_fim: date | None,
+                       transactions: list[dict[str, Any]]) -> SaveResult:
+        """Saves the statement and only the transactions not yet in the database (see deduplication.py)."""
+        # Imports of the same user queue up until the commit: without this, two overlapping statements
+        # sent at the same time read the database before the other one saved, and the duplicates went in
+        # twice. The lock is released at the end of the transaction; different users do not wait for each other.
+        self.con.execute("select pg_advisory_xact_lock(hashtextextended(%s::text, 0))", (str(user_id),))
+        if self._one("select 1 from public.extratos where usuario_id = %s and hash_arquivo = %s",
+                     user_id, hash_arquivo):
+            raise DuplicateStatement
+        existing: list[dict[str, Any]] = []
+        if transactions:
+            dates = [t["data"] for t in transactions]
+            existing = self._all(
                 "select id, banco, data, valor, tipo, meio, historico, contraparte from public.transacoes "
                 "where usuario_id = %s and banco = any(%s) and data between %s and %s order by id",
-                usuario_id, sorted({t["banco"] for t in transacoes}), min(datas), max(datas))
-        gravar, ids_repetidas = separa_novas_com_ids(existentes, transacoes)
-        bancos = Counter(t["banco"] for t in transacoes)
-        banco = bancos.most_common(1)[0][0] if bancos else ""
+                user_id, sorted({t["banco"] for t in transactions}), min(dates), max(dates))
+        to_save, duplicate_ids = split_new_with_ids(existing, transactions)
+        banks = Counter(t["banco"] for t in transactions)
+        bank = banks.most_common(1)[0][0] if banks else ""
         try:
-            extrato_id = self._uma(
+            statement_id = self._one(
                 "insert into public.extratos (usuario_id, nome_arquivo, hash_arquivo, banco, parser, "
                 "periodo_inicio, periodo_fim, linhas_gravadas) values (%s, %s, %s, %s, %s, %s, %s, %s) returning id",
-                usuario_id, nome_arquivo, hash_arquivo, banco, parser, periodo_inicio, periodo_fim, len(gravar))["id"]
+                user_id, nome_arquivo, hash_arquivo, bank, parser, periodo_inicio, periodo_fim, len(to_save))["id"]
         except psycopg.errors.UniqueViolation:
-            # o mesmo arquivo chegou duas vezes ao mesmo tempo (ex.: duas abas): o outro envio ganhou
-            raise ExtratoRepetido from None
-        if gravar:
+            # the same file arrived twice at the same time (e.g. two tabs): the other upload won
+            raise DuplicateStatement from None
+        if to_save:
             with self.con.cursor() as cur:
-                colunas = (*COLUNAS_TRANSACAO, COLUNA_ORIGINAL)
+                columns = (*TRANSACTION_COLUMNS, ORIGINAL_COLUMN)
                 cur.executemany(
-                    f"insert into public.transacoes (usuario_id, extrato_id, {', '.join(colunas)}) "
-                    f"values (%s, %s, {', '.join(['%s'] * len(colunas))})",
-                    [(usuario_id, extrato_id, *(t[c] for c in COLUNAS_TRANSACAO), t.get(COLUNA_ORIGINAL))
-                     for t in gravar])
-        # vínculos: as gravadas agora e as repetidas (que já estavam no banco vindas de outro extrato)
+                    f"insert into public.transacoes (usuario_id, extrato_id, {', '.join(columns)}) "
+                    f"values (%s, %s, {', '.join(['%s'] * len(columns))})",
+                    [(user_id, statement_id, *(t[c] for c in TRANSACTION_COLUMNS), t.get(ORIGINAL_COLUMN))
+                     for t in to_save])
+        # links: the ones saved now and the duplicates (already in the database from another statement)
         self.con.execute(
             "insert into public.extrato_transacoes (extrato_id, transacao_id) "
             "select %s, id from public.transacoes where extrato_id = %s",
-            (extrato_id, extrato_id))
-        if ids_repetidas:
+            (statement_id, statement_id))
+        if duplicate_ids:
             self.con.execute(
                 "insert into public.extrato_transacoes (extrato_id, transacao_id) "
                 "select %s, unnest(%s::bigint[]) on conflict do nothing",
-                (extrato_id, ids_repetidas))
-        return Gravacao(extrato_id, len(gravar), len(ids_repetidas))
+                (statement_id, duplicate_ids))
+        return SaveResult(statement_id, len(to_save), len(duplicate_ids))
 
-    def lista_extratos(self, usuario_id: UUID) -> list[dict[str, Any]]:
-        return self._todas(
+    def list_statements(self, user_id: UUID) -> list[dict[str, Any]]:
+        return self._all(
             "select id, nome_arquivo, banco, parser, periodo_inicio, periodo_fim, linhas_gravadas, enviado_em "
-            "from public.extratos where usuario_id = %s order by enviado_em desc", usuario_id)
+            "from public.extratos where usuario_id = %s order by enviado_em desc", user_id)
 
-    def apaga_extrato(self, usuario_id: UUID, extrato_id: UUID) -> bool:
-        """Apaga o extrato e as transações que só ele trouxe. False se não for do usuário.
+    def delete_statement(self, user_id: UUID, statement_id: UUID) -> bool:
+        """Deletes the statement and the transactions only it brought. False if it is not the user's.
 
-        Uma transação que outro extrato também trouxe (períodos sobrepostos) não é apagada: passa
-        para esse outro extrato, que continua importado.
+        A transaction that another statement also brought (overlapping periods) is not deleted: it
+        moves to that other statement, which stays imported.
         """
-        if not self._uma("select 1 from public.extratos where id = %s and usuario_id = %s",
-                         extrato_id, usuario_id):
+        if not self._one("select 1 from public.extratos where id = %s and usuario_id = %s",
+                         statement_id, user_id):
             return False
-        herdeiros = self._todas(
+        heirs = self._all(
             "update public.transacoes t set extrato_id = o.extrato_id "
             "from (select distinct on (et.transacao_id) et.transacao_id, et.extrato_id "
             "      from public.extrato_transacoes et "
@@ -152,185 +152,186 @@ class Banco:
             "            (select id from public.transacoes where extrato_id = %s) "
             "      order by et.transacao_id, e.enviado_em) o "
             "where t.id = o.transacao_id returning t.extrato_id",
-            usuario_id, extrato_id, extrato_id)
-        if herdeiros:
+            user_id, statement_id, statement_id)
+        if heirs:
             self.con.execute(
                 "update public.extratos e set linhas_gravadas = "
                 "(select count(*) from public.transacoes t where t.extrato_id = e.id) where e.id = any(%s)",
-                (sorted({h["extrato_id"] for h in herdeiros}),))
+                (sorted({h["extrato_id"] for h in heirs}),))
         cur = self.con.execute("delete from public.extratos where id = %s and usuario_id = %s",
-                               (extrato_id, usuario_id))
+                               (statement_id, user_id))
         return cur.rowcount > 0
 
-    def transacoes(self, usuario_id: UUID) -> list[dict[str, Any]]:
-        return self._todas(
+    def transactions(self, user_id: UUID) -> list[dict[str, Any]]:
+        return self._all(
             "select data, historico, contraparte, valor, tipo, meio, banco, categoria from public.transacoes "
-            "where usuario_id = %s order by data, id", usuario_id)
+            "where usuario_id = %s order by data, id", user_id)
 
-    def periodo_transacoes(self, usuario_id: UUID) -> tuple[date | None, date | None]:
-        """Data da primeira e da última transação do usuário (None, None se não houver)."""
-        linha = self._uma("select min(data) as primeira, max(data) as ultima from public.transacoes "
-                          "where usuario_id = %s", usuario_id)
-        return linha["primeira"], linha["ultima"]
+    def transaction_period(self, user_id: UUID) -> tuple[date | None, date | None]:
+        """Date of the user's first and last transaction (None, None if there are none)."""
+        row = self._one("select min(data) as primeira, max(data) as ultima from public.transacoes "
+                        "where usuario_id = %s", user_id)
+        return row["primeira"], row["ultima"]
 
-    def busca_transacoes(self, usuario_id: UUID, *, inicio: date | None = None, fim: date | None = None,
-                         categoria: str | None = None, sem_categoria: bool = False) -> list[dict[str, Any]]:
-        """Transações do usuário para a aba Extrato, da mais recente para a mais antiga.
+    def find_transactions(self, user_id: UUID, *, start: date | None = None, end: date | None = None,
+                          categoria: str | None = None, uncategorized: bool = False) -> list[dict[str, Any]]:
+        """The user's transactions for the Extrato tab, from the most recent to the oldest.
 
-        Filtros opcionais: período (inclusivo) e uma categoria, ou só as sem categoria.
-        Inclui o original cifrado (só a aba Extrato decifra; `transacoes()`, do chat, não o lê).
+        Optional filters: period (inclusive) and one category, or only the uncategorized ones.
+        Includes the encrypted original (only the Extrato tab decrypts it; `transactions()`, used by
+        the chat, does not read it).
         """
-        condicoes, args = ["usuario_id = %s"], [usuario_id]
-        if inicio is not None:
-            condicoes.append("data >= %s")
-            args.append(inicio)
-        if fim is not None:
-            condicoes.append("data <= %s")
-            args.append(fim)
-        if sem_categoria:
-            condicoes.append("categoria is null")
+        conditions, args = ["usuario_id = %s"], [user_id]
+        if start is not None:
+            conditions.append("data >= %s")
+            args.append(start)
+        if end is not None:
+            conditions.append("data <= %s")
+            args.append(end)
+        if uncategorized:
+            conditions.append("categoria is null")
         elif categoria is not None:
-            condicoes.append("categoria = %s")
+            conditions.append("categoria = %s")
             args.append(categoria)
-        return self._todas(
+        return self._all(
             "select id, data, historico, contraparte, valor, tipo, meio, banco, categoria, original_cifrado "
-            f"from public.transacoes where {' and '.join(condicoes)} order by data desc, id desc", *args)
+            f"from public.transacoes where {' and '.join(conditions)} order by data desc, id desc", *args)
 
-    def muda_categoria(self, usuario_id: UUID, transacao_id: int, categoria: str | None) -> bool:
-        """Correção feita pelo usuário (origem "usuario"); None = sem categoria. False se não for dele.
+    def set_category(self, user_id: UUID, transaction_id: int, categoria: str | None) -> bool:
+        """Correction made by the user (origin "usuario"); None = uncategorized. False if not theirs.
 
-        A correção também vai para public.correcoes (só campos anonimizados), onde sobrevive à
-        exclusão do extrato. Voltar para "sem categoria" desfaz a correção nas duas tabelas.
+        The correction also goes to public.correcoes (anonymized fields only), where it survives the
+        deletion of the statement. Going back to "uncategorized" undoes the correction in both tables.
         """
-        linha = self._uma(
+        row = self._one(
             "update public.transacoes set categoria = %s, "
             "origem_categoria = case when %s::text is null then null else 'usuario' end, "
             "corrigida_em = case when %s::text is null then null else now() end "
             "where id = %s and usuario_id = %s "
             "returning data, historico, contraparte, valor, tipo, meio, banco",
-            categoria, categoria, categoria, transacao_id, usuario_id)
-        if linha is None:
+            categoria, categoria, categoria, transaction_id, user_id)
+        if row is None:
             return False
         if categoria is None:
-            self.con.execute("delete from public.correcoes where transacao_id = %s", (transacao_id,))
+            self.con.execute("delete from public.correcoes where transacao_id = %s", (transaction_id,))
             return True
-        campos = tuple(linha[c] for c in _CAMPOS_DA_CORRECAO)
-        # a mesma transação corrigida antes num extrato já excluído e importada de novo: a correção
-        # antiga (sem transação) dá lugar a esta, para não contar duas vezes no treino
+        fields = tuple(row[c] for c in _CORRECTION_FIELDS)
+        # the same transaction corrected before in an already deleted statement and imported again:
+        # the old correction (without a transaction) gives way to this one, so it is not counted twice in training
         self.con.execute(
             "delete from public.correcoes where usuario_id = %s and transacao_id is null and "
-            f"({', '.join(_CAMPOS_DA_CORRECAO)}) = ({', '.join(['%s'] * len(_CAMPOS_DA_CORRECAO))})",
-            (usuario_id, *campos))
+            f"({', '.join(_CORRECTION_FIELDS)}) = ({', '.join(['%s'] * len(_CORRECTION_FIELDS))})",
+            (user_id, *fields))
         self.con.execute(
-            f"insert into public.correcoes (usuario_id, transacao_id, {', '.join(_CAMPOS_DA_CORRECAO)}, categoria) "
-            f"values (%s, %s, {', '.join(['%s'] * len(_CAMPOS_DA_CORRECAO))}, %s) "
+            f"insert into public.correcoes (usuario_id, transacao_id, {', '.join(_CORRECTION_FIELDS)}, categoria) "
+            f"values (%s, %s, {', '.join(['%s'] * len(_CORRECTION_FIELDS))}, %s) "
             "on conflict (transacao_id) do update set categoria = excluded.categoria, corrigida_em = now()",
-            (usuario_id, transacao_id, *campos, categoria))
+            (user_id, transaction_id, *fields, categoria))
         return True
 
-    # --- retreino do classificador (api/services/retraining.py) ---
-    # Exceção à regra "toda função filtra pelo usuário": o modelo é um só, treinado com as correções
-    # de todos. Só campos anonimizados saem daqui (nunca original_cifrado).
+    # --- classifier retraining (api/services/retraining.py) ---
+    # Exception to the "every function filters by the user" rule: there is a single model, trained with
+    # everyone's corrections. Only anonymized fields leave here (never original_cifrado).
 
-    def correcoes_para_treino(self) -> list[dict[str, Any]]:
-        """Todas as correções dos usuários, como exemplos de treino (contrato do parser + categoria).
+    def corrections_for_training(self) -> list[dict[str, Any]]:
+        """All the users' corrections, as training examples (parser contract + category).
 
-        Vêm de public.correcoes: incluem as de extratos já excluídos.
+        They come from public.correcoes: they include the ones from already deleted statements.
         """
-        return self._todas(
+        return self._all(
             "select data, historico, contraparte, valor, tipo, meio, banco, categoria, corrigida_em "
             "from public.correcoes order by corrigida_em, id")
 
-    def correcoes_desde_ultimo_treino(self) -> int:
-        """Correções feitas depois do início da última tentativa de retreino concluída, com sucesso
-        ou erro (todas, se nunca houve).
+    def corrections_since_last_training(self) -> int:
+        """Corrections made after the start of the last finished retraining attempt, successful or
+        failed (all of them, if there was never one).
 
-        Contar só desde o último "ok" fazia cada correção seguinte a um erro (ex.: CSV base ausente)
-        disparar outro retreino. Agora, depois de um erro, são precisas mais 15 correções; o retreino
-        seguinte usa todas as correções, inclusive as anteriores ao erro.
+        Counting only since the last "ok" made every correction after an error (e.g. missing base CSV)
+        trigger another retraining. Now, after an error, 15 more corrections are needed; the next
+        retraining uses all corrections, including the ones before the error.
         """
-        return self._uma(
+        return self._one(
             "select count(*) as n from public.correcoes "
             "where corrigida_em > coalesce((select max(iniciado_em) from public.treinos_modelo "
             "where status <> 'rodando'), '-infinity')")["n"]
 
-    def treino_rodando(self) -> bool:
-        """Há retreino em andamento? (um "rodando" de mais de 30 min é considerado travado)"""
-        return self._uma(
+    def training_running(self) -> bool:
+        """Is a retraining in progress? (a "rodando" older than 30 min is considered stuck)"""
+        return self._one(
             "select 1 from public.treinos_modelo where status = 'rodando' "
             "and iniciado_em > now() - interval '30 minutes'") is not None
 
-    def inicia_treino(self) -> int:
-        return self._uma("insert into public.treinos_modelo default values returning id")["id"]
+    def start_training(self) -> int:
+        return self._one("insert into public.treinos_modelo default values returning id")["id"]
 
-    def inicia_treino_se_livre(self) -> int | None:
-        """Registra um retreino "rodando", ou None se já houver um. Atômico entre processos.
+    def start_training_if_free(self) -> int | None:
+        """Records a "rodando" retraining, or None if there already is one. Atomic across processes.
 
-        Sem a trava, duas APIs (ou a API e `python -m api.retrain`) podiam conferir "nenhum rodando"
-        ao mesmo tempo e iniciar dois retreinos. A trava vale até o commit de quem chamou.
+        Without the lock, two APIs (or the API and `python -m api.retrain`) could check "none running"
+        at the same time and start two retrainings. The lock holds until the caller's commit.
         """
-        self.con.execute("select pg_advisory_xact_lock(%s)", (_TRAVA_RETREINO,))
-        if self.treino_rodando():
+        self.con.execute("select pg_advisory_xact_lock(%s)", (_RETRAINING_LOCK,))
+        if self.training_running():
             return None
-        return self.inicia_treino()
+        return self.start_training()
 
-    def conclui_treino(self, treino_id: int, *, status: str, correcoes: int = 0, linhas_treino: int = 0,
-                       acerto_correcoes_antes: float | None = None, acerto_correcoes_depois: float | None = None,
-                       acerto_base_depois: float | None = None, mensagem: str = "") -> None:
+    def finish_training(self, training_id: int, *, status: str, correcoes: int = 0, linhas_treino: int = 0,
+                        acerto_correcoes_antes: float | None = None, acerto_correcoes_depois: float | None = None,
+                        acerto_base_depois: float | None = None, mensagem: str = "") -> None:
         self.con.execute(
             "update public.treinos_modelo set concluido_em = now(), status = %s, correcoes = %s, "
             "linhas_treino = %s, acerto_correcoes_antes = %s, acerto_correcoes_depois = %s, "
             "acerto_base_depois = %s, mensagem = %s where id = %s",
             (status, correcoes, linhas_treino, acerto_correcoes_antes, acerto_correcoes_depois,
-             acerto_base_depois, mensagem[:500], treino_id))
+             acerto_base_depois, mensagem[:500], training_id))
 
-    def treinos(self, limite: int = 20) -> list[dict[str, Any]]:
-        return self._todas("select * from public.treinos_modelo order by iniciado_em desc limit %s", limite)
+    def trainings(self, limit: int = 20) -> list[dict[str, Any]]:
+        return self._all("select * from public.treinos_modelo order by iniciado_em desc limit %s", limit)
 
-    # --- conversas do assistente ---
+    # --- assistant conversations ---
 
-    def lista_conversas(self, usuario_id: UUID) -> list[dict[str, Any]]:
-        return self._todas(
+    def list_conversations(self, user_id: UUID) -> list[dict[str, Any]]:
+        return self._all(
             "select id, titulo, criada_em, atualizada_em from public.conversas "
-            "where usuario_id = %s order by atualizada_em desc", usuario_id)
+            "where usuario_id = %s order by atualizada_em desc", user_id)
 
-    def cria_conversa(self, usuario_id: UUID, titulo: str) -> UUID:
-        return self._uma("insert into public.conversas (usuario_id, titulo) values (%s, %s) returning id",
-                         usuario_id, titulo)["id"]
+    def create_conversation(self, user_id: UUID, title: str) -> UUID:
+        return self._one("insert into public.conversas (usuario_id, titulo) values (%s, %s) returning id",
+                         user_id, title)["id"]
 
-    def conversa_e_do_usuario(self, usuario_id: UUID, conversa_id: UUID) -> bool:
-        return self._uma("select 1 from public.conversas where id = %s and usuario_id = %s",
-                         conversa_id, usuario_id) is not None
+    def conversation_belongs_to_user(self, user_id: UUID, conversation_id: UUID) -> bool:
+        return self._one("select 1 from public.conversas where id = %s and usuario_id = %s",
+                         conversation_id, user_id) is not None
 
-    def renomeia_conversa(self, usuario_id: UUID, conversa_id: UUID, titulo: str) -> bool:
+    def rename_conversation(self, user_id: UUID, conversation_id: UUID, title: str) -> bool:
         cur = self.con.execute("update public.conversas set titulo = %s where id = %s and usuario_id = %s",
-                               (titulo, conversa_id, usuario_id))
+                               (title, conversation_id, user_id))
         return cur.rowcount > 0
 
-    def apaga_conversa(self, usuario_id: UUID, conversa_id: UUID) -> bool:
+    def delete_conversation(self, user_id: UUID, conversation_id: UUID) -> bool:
         cur = self.con.execute("delete from public.conversas where id = %s and usuario_id = %s",
-                               (conversa_id, usuario_id))
+                               (conversation_id, user_id))
         return cur.rowcount > 0
 
-    def mensagens(self, conversa_id: UUID) -> list[dict[str, Any]]:
-        return self._todas(
+    def messages(self, conversation_id: UUID) -> list[dict[str, Any]]:
+        return self._all(
             "select id, papel, texto, grafico, criada_em from public.mensagens "
-            "where conversa_id = %s order by criada_em, id", conversa_id)
+            "where conversa_id = %s order by criada_em, id", conversation_id)
 
-    def grava_mensagem(self, conversa_id: UUID, papel: str, texto: str,
-                       grafico: dict[str, Any] | None = None) -> dict[str, Any]:
+    def save_message(self, conversation_id: UUID, role: str, text: str,
+                     chart: dict[str, Any] | None = None) -> dict[str, Any]:
         try:
-            return self._uma(
+            return self._one(
                 "insert into public.mensagens (conversa_id, papel, texto, grafico) values (%s, %s, %s, %s) "
                 "returning id, papel, texto, grafico, criada_em",
-                conversa_id, papel, texto, json.dumps(grafico, default=_json) if grafico else None)
+                conversation_id, role, text, json.dumps(chart, default=_json_default) if chart else None)
         except psycopg.errors.ForeignKeyViolation:
-            raise ConversaApagada from None
+            raise ConversationDeleted from None
 
 
-def _json(valor: Any) -> Any:
-    if isinstance(valor, Decimal):
-        return float(valor)
-    if isinstance(valor, (date, datetime)):
-        return valor.isoformat()
-    raise TypeError(type(valor))
+def _json_default(value: Any) -> Any:
+    if isinstance(value, Decimal):
+        return float(value)
+    if isinstance(value, (date, datetime)):
+        return value.isoformat()
+    raise TypeError(type(value))

@@ -1,98 +1,98 @@
-"""Transações salvas na conta do usuário (aba Extrato), com filtro de período e categoria."""
+"""Transactions saved in the user's account (Extrato tab), with period and category filters."""
 
 from datetime import date
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Path, Query, Response
 
-from database.repository import Banco
+from database.repository import Database
 from ml.classes import Category
 
 from .. import cipher
-from ..auth import Usuario, usuario_atual
-from ..dependencies import banco
-from ..schemas import NovaCategoria, PeriodoTransacoes, TransacaoSalva
+from ..auth import User, current_user
+from ..dependencies import database
+from ..schemas import NewCategory, SavedTransaction, TransactionPeriod
 from ..services import retraining
 
 router = APIRouter(tags=["transacoes"])
 
-SEM_CATEGORIA = "sem_categoria"
-MESES_PADRAO = 6
-# o id é bigint no banco: fora deste intervalo o Postgres dava erro e a rota respondia 500
-ID_MAXIMO = 2**63 - 1
+UNCATEGORIZED = "sem_categoria"
+DEFAULT_MONTHS = 6
+# the id is a bigint in the database: outside this range Postgres raised an error and the route answered 500
+MAX_ID = 2**63 - 1
 
 
-def inicio_da_janela(ultima: date, meses: int = MESES_PADRAO) -> date:
-    """1º dia do mês que abre a janela de N meses terminada no mês de `ultima`.
+def window_start(last: date, months: int = DEFAULT_MONTHS) -> date:
+    """1st day of the month that opens the N-month window ending in the month of `last`.
 
-    Mesma regra do dashboard (agent/queries.py): a janela termina no mês da transação mais
-    recente, não no mês de hoje. Ex.: última em 15/03/2024, 6 meses -> 01/10/2023.
+    Same rule as the dashboard (agent/queries.py): the window ends in the month of the most recent
+    transaction, not in the current month. E.g.: last on 15/03/2024, 6 months -> 01/10/2023.
     """
-    indice = ultima.year * 12 + (ultima.month - 1) - (meses - 1)
-    return date(indice // 12, indice % 12 + 1, 1)
+    index = last.year * 12 + (last.month - 1) - (months - 1)
+    return date(index // 12, index % 12 + 1, 1)
 
 
 @router.get("/transacoes/periodo")
-def periodo(
-    usuario: Annotated[Usuario, Depends(usuario_atual)], db: Annotated[Banco, Depends(banco)]
-) -> PeriodoTransacoes:
-    primeira, ultima = db.periodo_transacoes(usuario.id)
-    if ultima is None:
-        return PeriodoTransacoes(primeira=None, ultima=None, padrao_inicio=None, padrao_fim=None)
-    return PeriodoTransacoes(primeira=primeira, ultima=ultima,
-                             padrao_inicio=max(primeira, inicio_da_janela(ultima)), padrao_fim=ultima)
+def period(
+    user: Annotated[User, Depends(current_user)], db: Annotated[Database, Depends(database)]
+) -> TransactionPeriod:
+    first, last = db.transaction_period(user.id)
+    if last is None:
+        return TransactionPeriod(primeira=None, ultima=None, padrao_inicio=None, padrao_fim=None)
+    return TransactionPeriod(primeira=first, ultima=last,
+                             padrao_inicio=max(first, window_start(last)), padrao_fim=last)
 
 
 @router.get("/transacoes")
-def lista_transacoes(
-    usuario: Annotated[Usuario, Depends(usuario_atual)],
-    db: Annotated[Banco, Depends(banco)],
-    inicio: Annotated[date | None, Query(description="Data inicial (inclusiva), AAAA-MM-DD")] = None,
-    fim: Annotated[date | None, Query(description="Data final (inclusiva), AAAA-MM-DD")] = None,
-    categoria: Annotated[str | None, Query(description="Uma das categorias ou 'sem_categoria'")] = None,
-) -> list[TransacaoSalva]:
-    if inicio and fim and inicio > fim:
+def list_transactions(
+    user: Annotated[User, Depends(current_user)],
+    db: Annotated[Database, Depends(database)],
+    start: Annotated[date | None, Query(alias="inicio", description="Data inicial (inclusiva), AAAA-MM-DD")] = None,
+    end: Annotated[date | None, Query(alias="fim", description="Data final (inclusiva), AAAA-MM-DD")] = None,
+    category: Annotated[str | None, Query(alias="categoria", description="Uma das categorias ou 'sem_categoria'")] = None,
+) -> list[SavedTransaction]:
+    if start and end and start > end:
         raise HTTPException(400, "a data inicial deve ser anterior ou igual à data final")
-    validas = {c.value for c in Category}
-    if categoria is not None and categoria != SEM_CATEGORIA and categoria not in validas:
+    valid = {c.value for c in Category}
+    if category is not None and category != UNCATEGORIZED and category not in valid:
         raise HTTPException(400, "categoria inválida")
-    linhas = db.busca_transacoes(
-        usuario.id,
-        inicio=inicio,
-        fim=fim,
-        categoria=categoria if categoria in validas else None,
-        sem_categoria=categoria == SEM_CATEGORIA,
+    rows = db.find_transactions(
+        user.id,
+        start=start,
+        end=end,
+        categoria=category if category in valid else None,
+        uncategorized=category == UNCATEGORIZED,
     )
     try:
-        return [_com_original(t) for t in linhas]
-    except cipher.ChaveInvalida as exc:
+        return [_with_original(t) for t in rows]
+    except cipher.InvalidKey as exc:
         raise HTTPException(500, str(exc)) from None
 
 
-def _com_original(linha: dict) -> TransacaoSalva:
-    """Decifra o original só para devolver ao dono; o texto cifrado não sai da API."""
-    original = cipher.decifra(linha.pop("original_cifrado", None)) or {}
-    return TransacaoSalva(**linha, historico_original=original.get("historico") or None,
-                          contraparte_original=original.get("contraparte") or None)
+def _with_original(row: dict) -> SavedTransaction:
+    """Decrypts the original only to return it to the owner; the encrypted text never leaves the API."""
+    original = cipher.decrypt(row.pop("original_cifrado", None)) or {}
+    return SavedTransaction(**row, historico_original=original.get("historico") or None,
+                            contraparte_original=original.get("contraparte") or None)
 
 
 @router.patch("/transacoes/{transacao_id}", status_code=204)
-def muda_categoria(
-    transacao_id: Annotated[int, Path(ge=1, le=ID_MAXIMO)],
-    nova: NovaCategoria,
-    usuario: Annotated[Usuario, Depends(usuario_atual)],
-    db: Annotated[Banco, Depends(banco)],
+def set_category(
+    transaction_id: Annotated[int, Path(alias="transacao_id", ge=1, le=MAX_ID)],
+    new: NewCategory,
+    user: Annotated[User, Depends(current_user)],
+    db: Annotated[Database, Depends(database)],
 ) -> Response:
-    """O usuário corrige a categoria (vale para o dashboard e o assistente). None = sem categoria.
+    """The user fixes the category (it applies to the dashboard and the assistant). None = uncategorized.
 
-    A correção também vira exemplo de treino: a cada 15 novas, o modelo é retreinado em segundo
-    plano (api/services/retraining.py).
+    The correction also becomes a training example: every 15 new ones, the model is retrained in the
+    background (api/services/retraining.py).
     """
-    if nova.categoria is not None and nova.categoria not in {c.value for c in Category}:
+    if new.categoria is not None and new.categoria not in {c.value for c in Category}:
         raise HTTPException(400, "categoria inválida")
-    if not db.muda_categoria(usuario.id, transacao_id, nova.categoria):
+    if not db.set_category(user.id, transaction_id, new.categoria):
         raise HTTPException(404, "transação não encontrada")
-    # grava já: o retreino roda noutra conexão e precisa ver esta correção
-    db.confirma()
-    retraining.dispara_se_preciso(db)
+    # save now: the retraining runs on another connection and needs to see this correction
+    db.commit()
+    retraining.trigger_if_needed(db)
     return Response(status_code=204)

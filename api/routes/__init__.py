@@ -1,1 +1,1 @@
-"""Rotas da API, uma por arquivo."""
+"""API routes, one per file."""

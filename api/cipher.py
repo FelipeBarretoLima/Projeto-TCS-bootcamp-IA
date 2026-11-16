@@ -7,6 +7,8 @@ para mostrar ao dono da transação; o ML, o chat (Gemini) e o treino usam só o
     python -m api.cipher --nova-chave     gera uma chave para o .env
 """
 
+# The module docstring above is the CLI help (printed by `python -m api.cipher`), so it stays in Portuguese.
+
 from __future__ import annotations
 
 import json
@@ -20,43 +22,43 @@ from . import config
 log = logging.getLogger(__name__)
 
 
-class ChaveInvalida(Exception):
-    """CHAVE_ORIGINAIS está preenchida, mas não é uma chave Fernet válida."""
+class InvalidKey(Exception):
+    """CHAVE_ORIGINAIS is filled in, but it is not a valid Fernet key."""
 
 
 def _fernet() -> Fernet | None:
-    if not config.CHAVE_ORIGINAIS:
+    if not config.ORIGINALS_KEY:
         return None
     try:
-        return Fernet(config.CHAVE_ORIGINAIS.encode())
+        return Fernet(config.ORIGINALS_KEY.encode())
     except ValueError:
-        raise ChaveInvalida("CHAVE_ORIGINAIS inválida no .env: gere com python -m api.cipher --nova-chave") from None
+        raise InvalidKey("CHAVE_ORIGINAIS inválida no .env: gere com python -m api.cipher --nova-chave") from None
 
 
-def ativa() -> bool:
-    """Há chave configurada? Sem ela, os originais não são gravados."""
+def enabled() -> bool:
+    """Is a key configured? Without it, the originals are not saved."""
     return _fernet() is not None
 
 
-def cifra(original: dict[str, str]) -> str | None:
-    """{"historico", "contraparte"} -> texto cifrado; None se não houver chave."""
+def encrypt(original: dict[str, str]) -> str | None:
+    """{"historico", "contraparte"} -> encrypted text; None if there is no key."""
     f = _fernet()
     if f is None:
         return None
     return f.encrypt(json.dumps(original, ensure_ascii=False).encode()).decode()
 
 
-def decifra(cifrado: str | None) -> dict[str, str] | None:
-    """Texto cifrado -> {"historico", "contraparte"}; None se vazio, sem chave ou chave diferente."""
-    if not cifrado:
+def decrypt(encrypted: str | None) -> dict[str, str] | None:
+    """Encrypted text -> {"historico", "contraparte"}; None if empty, without a key or with a different key."""
+    if not encrypted:
         return None
     f = _fernet()
     if f is None:
         return None
     try:
-        return json.loads(f.decrypt(cifrado.encode()))
+        return json.loads(f.decrypt(encrypted.encode()))
     except (InvalidToken, ValueError):
-        # cifrado com outra chave (ex.: outra máquina com chave diferente): mostra o anonimizado
+        # encrypted with another key (e.g. another machine with a different key): show the anonymized text
         log.warning("texto original não pôde ser decifrado (chave diferente?)")
         return None
 

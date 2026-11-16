@@ -16,14 +16,19 @@ exatamente como estão.
 3. Um módulo por vez, nesta ordem: `extraction/` → `ml/` → `database/` → `agent/` → `api/`.
    O `frontend/` está fora da tradução.
 
-## Situação atual (2026-11-12)
+## Situação atual (2026-11-15)
 
-A tradução foi **encerrada por decisão do usuário** depois de `ml/`:
+O usuário retomou a tradução em 2026-11-15 (branch `refactor/english-database-agent-api`):
 - Feito: estrutura de pastas e arquivos (todos os módulos Python), pacote `statement`,
-  conteúdo de `extraction/` e de `ml/`.
-- Não traduzido (de propósito): o **conteúdo** de `database/`, `agent/` e `api/` (nomes de
-  funções, variáveis, comentários). Só os nomes de pastas e arquivos deles estão em inglês.
-- Não retome os módulos restantes sem o usuário pedir. Se pedir, siga as regras abaixo.
+  conteúdo de `extraction/`, `ml/`, `database/` (`Database`, `SaveResult`, `save_statement`...),
+  `agent/` (`answer`, `Answer`, `queries.to_dataframe`, `queries.dashboard`...) e `api/`
+  (`User`, `current_user`, `cipher.encrypt`, `config.MODEL_PATH`, classes Pydantic em inglês com
+  campos em português, parâmetros de rota com `alias`). **Tradução do Python concluída.**
+- Conferido com o OpenAPI antes/depois: rotas, parâmetros públicos e campos do JSON idênticos.
+- Em `database/`, os parâmetros com nome de coluna ficaram em português (`nome_arquivo`,
+  `hash_arquivo`, `periodo_inicio`, `categoria`, e os de `finish_training`, que o retreino passa
+  por `**registro` com chaves em texto).
+- As skills em `skills/` (recriação da aplicação) ficam em português: decisão do usuário.
 4. Apresente ao usuário o plano de cada módulo antes de editar e espere a confirmação.
 5. Renomeie por tokens, não por texto: um script com `tokenize` troca só nomes de código e nunca
    toca em strings, regex ou textos dos PDFs. Antes de aplicar, verifique colisões (nome novo que
@@ -82,9 +87,10 @@ A tradução foi **encerrada por decisão do usuário** depois de `ml/`:
   onde representam esses campos.
 - Valores dos enums (`"entrada"`, `"saida"`, `"pix"`, `"mercado"`...). O nome do enum e dos membros
   pode ser traduzido (`TransactionType.INCOME = "entrada"`).
-- Pastas e arquivos de dados locais (fora do git, cada colega tem os seus): `data/privado/`,
-  `data/raw/`, `data/saida/`, `ml/dados/`, `ml/modelos/svm_tfidf.pkl`, e os nomes dos arquivos
-  gravados neles (`revisar.csv`, `historicos_desconhecidos.csv`...).
+- Pastas e arquivos de dados locais (fora do git, cada colega tem os seus): `ml/dados/`,
+  `ml/modelos/svm_tfidf.pkl`, e os nomes dos arquivos gravados em `data/` (`revisar.csv`,
+  `historicos_desconhecidos.csv`...). As subpastas de `data/` já foram traduzidas (2026-11-15):
+  `data/private/`, `data/output/`, `data/raw/`, `data/test/`, `data/test_output/`, `data/labels/`.
 - Pasta `dados/` dentro do pacote `statement` (listas públicas usadas por `files("statement")`).
 
 ### Interface de linha de comando e ambiente
@@ -108,9 +114,10 @@ A tradução foi **encerrada por decisão do usuário** depois de `ml/`:
    `from agent import queries` → `queries.tabela(...)`): renomear o módulo exige trocar os usos
    no arquivo. Cuidado com nomes iguais que são variáveis (`limite = Limite(...)`) ou atributos
    (`self.extratos`).
-4. **Prompt do agente** (`agent/assistant.py`): o texto cita as ferramentas pelo nome
-   (`gastos_por_categoria`, `gastos_mensais`, `resumo_do_mes`...). Renomeie as funções `@tool` e
-   o prompt juntos.
+4. **O que o Gemini lê** (`agent/assistant.py`): decisão do usuário, fica em português: o prompt
+   (`INSTRUCTIONS`), os nomes das ferramentas (fixados em `@tool("gastos_mensais")`), os
+   parâmetros delas (`meses`, `de`, `ate`, `quantidade`, `ano`, `mes`) e as docstrings das
+   ferramentas (viram a descrição). Só a função Python por trás tem nome em inglês.
 5. **Comandos documentados**: `python -m statement`, `python -m ml.label`, `python -m ml.train`,
    `python -m database.migrate`, `python -m api.retrain`, `python -m api.cipher`,
    `uvicorn api.main:app`. Se um módulo mudar de nome, atualize README.md, `ml/README.md`,

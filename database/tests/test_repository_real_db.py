@@ -1,8 +1,8 @@
-"""Repositório contra o banco de verdade (Supabase). Só roda com TESTE_BANCO=1.
+"""Repository against the real database (Supabase). Only runs with TESTE_BANCO=1.
 
-    TESTE_BANCO=1 pytest database/tests/test_repositorio_banco_real.py
+    TESTE_BANCO=1 pytest database/tests/test_repository_real_db.py
 
-Tudo acontece numa transação desfeita no fim: nada fica gravado.
+Everything happens inside a transaction rolled back at the end: nothing is saved.
 """
 
 import os
@@ -13,162 +13,162 @@ from decimal import Decimal
 import psycopg
 import pytest
 
-from database.migrate import url_do_banco
-from database.repository import Banco, ExtratoRepetido
+from database.migrate import database_url
+from database.repository import Database, DuplicateStatement
 
 pytestmark = pytest.mark.skipif(os.environ.get("TESTE_BANCO") != "1", reason="defina TESTE_BANCO=1")
 
 
 @pytest.fixture
 def db():
-    con = psycopg.connect(url_do_banco(), prepare_threshold=None)
+    con = psycopg.connect(database_url(), prepare_threshold=None)
     try:
-        yield Banco(con)
+        yield Database(con)
     finally:
         con.rollback()
         con.close()
 
 
-def _usuario(db):
+def _user(db):
     uid = uuid.uuid4()
     db.con.execute("insert into auth.users (id, email, aud, role) values (%s, %s, 'authenticated', 'authenticated')",
                    (uid, f"{uid}@teste.invalid"))
     return uid
 
 
-def _t(dia, valor="-8.94"):
-    return {"data": date(2024, 1, dia), "historico": "COMPRA", "contraparte": "UBER", "valor": Decimal(valor),
+def _t(day, amount="-8.94"):
+    return {"data": date(2024, 1, day), "historico": "COMPRA", "contraparte": "UBER", "valor": Decimal(amount),
             "tipo": "saida", "meio": "cartao_credito", "banco": "nubank", "categoria": "transporte",
             "origem_categoria": "modelo"}
 
 
-def test_fluxo_completo(db):
-    u = _usuario(db)
-    g1 = db.grava_extrato(u, nome_arquivo="a.csv", hash_arquivo="h1", parser="p", periodo_inicio=date(2024, 1, 1),
-                          periodo_fim=date(2024, 1, 31), transacoes=[_t(2), _t(2)])
-    assert (g1.gravadas, g1.repetidas) == (2, 0)
-    g2 = db.grava_extrato(u, nome_arquivo="b.csv", hash_arquivo="h2", parser="p", periodo_inicio=None,
-                          periodo_fim=None, transacoes=[_t(2), _t(2), _t(2), _t(3)])
-    assert (g2.gravadas, g2.repetidas) == (2, 2)
-    with pytest.raises(ExtratoRepetido):
-        db.grava_extrato(u, nome_arquivo="a.csv", hash_arquivo="h1", parser="p", periodo_inicio=None,
-                         periodo_fim=None, transacoes=[_t(9)])
-    assert len(db.transacoes(u)) == 4 and len(db.lista_extratos(u)) == 2
+def test_full_flow(db):
+    u = _user(db)
+    g1 = db.save_statement(u, nome_arquivo="a.csv", hash_arquivo="h1", parser="p", periodo_inicio=date(2024, 1, 1),
+                           periodo_fim=date(2024, 1, 31), transactions=[_t(2), _t(2)])
+    assert (g1.saved, g1.duplicates) == (2, 0)
+    g2 = db.save_statement(u, nome_arquivo="b.csv", hash_arquivo="h2", parser="p", periodo_inicio=None,
+                           periodo_fim=None, transactions=[_t(2), _t(2), _t(2), _t(3)])
+    assert (g2.saved, g2.duplicates) == (2, 2)
+    with pytest.raises(DuplicateStatement):
+        db.save_statement(u, nome_arquivo="a.csv", hash_arquivo="h1", parser="p", periodo_inicio=None,
+                          periodo_fim=None, transactions=[_t(9)])
+    assert len(db.transactions(u)) == 4 and len(db.list_statements(u)) == 2
 
-    c = db.cria_conversa(u, "teste")
-    db.grava_mensagem(c, "usuario", "oi")
-    db.grava_mensagem(c, "agente", "olá", {"tipo": "barras", "titulo": "t", "rotulos": [], "series": []})
-    assert [m["papel"] for m in db.mensagens(c)] == ["usuario", "agente"]
-    assert db.mensagens(c)[1]["grafico"]["titulo"] == "t"
-    assert db.conversa_e_do_usuario(u, c) and not db.conversa_e_do_usuario(_usuario(db), c)
+    c = db.create_conversation(u, "teste")
+    db.save_message(c, "usuario", "oi")
+    db.save_message(c, "agente", "olá", {"tipo": "barras", "titulo": "t", "rotulos": [], "series": []})
+    assert [m["papel"] for m in db.messages(c)] == ["usuario", "agente"]
+    assert db.messages(c)[1]["grafico"]["titulo"] == "t"
+    assert db.conversation_belongs_to_user(u, c) and not db.conversation_belongs_to_user(_user(db), c)
 
-    # o extrato b também trazia as duas compras do dia 2: elas passam para ele em vez de sumir
-    assert db.apaga_extrato(u, g1.extrato_id)
-    assert len(db.transacoes(u)) == 4
-    [restante] = db.lista_extratos(u)
-    assert restante["linhas_gravadas"] == 4
-    assert db.apaga_extrato(u, g2.extrato_id)
-    assert db.transacoes(u) == []
-
-
-def test_busca_transacoes_com_filtros(db):
-    u, outro = _usuario(db), _usuario(db)
-    sem = {**_t(20, "-1.00"), "categoria": None, "origem_categoria": None}
-    mercado = {**_t(5, "-2.00"), "categoria": "mercado"}
-    db.grava_extrato(u, nome_arquivo="a.csv", hash_arquivo="h1", parser="p", periodo_inicio=None,
-                     periodo_fim=None, transacoes=[_t(2), mercado, sem])
-    db.grava_extrato(outro, nome_arquivo="b.csv", hash_arquivo="h1", parser="p", periodo_inicio=None,
-                     periodo_fim=None, transacoes=[_t(9)])
-
-    assert [t["data"].day for t in db.busca_transacoes(u)] == [20, 5, 2]
-    assert [t["data"].day for t in db.busca_transacoes(u, inicio=date(2024, 1, 3), fim=date(2024, 1, 20))] == [20, 5]
-    assert [t["data"].day for t in db.busca_transacoes(u, categoria="transporte")] == [2]
-    assert [t["data"].day for t in db.busca_transacoes(u, sem_categoria=True)] == [20]
-    assert db.busca_transacoes(u, fim=date(2024, 1, 4), categoria="mercado") == []
-    assert "origem_categoria" not in db.busca_transacoes(u)[0]
+    # statement b also brought the two purchases of day 2: they move to it instead of disappearing
+    assert db.delete_statement(u, g1.statement_id)
+    assert len(db.transactions(u)) == 4
+    [remaining] = db.list_statements(u)
+    assert remaining["linhas_gravadas"] == 4
+    assert db.delete_statement(u, g2.statement_id)
+    assert db.transactions(u) == []
 
 
-def test_periodo_transacoes(db):
-    u = _usuario(db)
-    assert db.periodo_transacoes(u) == (None, None)
-    db.grava_extrato(u, nome_arquivo="a.csv", hash_arquivo="h1", parser="p", periodo_inicio=None,
-                     periodo_fim=None, transacoes=[_t(9), _t(2, "-1.00"), _t(30, "-2.00")])
-    assert db.periodo_transacoes(u) == (date(2024, 1, 2), date(2024, 1, 30))
+def test_find_transactions_with_filters(db):
+    u, other = _user(db), _user(db)
+    uncategorized = {**_t(20, "-1.00"), "categoria": None, "origem_categoria": None}
+    grocery = {**_t(5, "-2.00"), "categoria": "mercado"}
+    db.save_statement(u, nome_arquivo="a.csv", hash_arquivo="h1", parser="p", periodo_inicio=None,
+                      periodo_fim=None, transactions=[_t(2), grocery, uncategorized])
+    db.save_statement(other, nome_arquivo="b.csv", hash_arquivo="h1", parser="p", periodo_inicio=None,
+                      periodo_fim=None, transactions=[_t(9)])
+
+    assert [t["data"].day for t in db.find_transactions(u)] == [20, 5, 2]
+    assert [t["data"].day for t in db.find_transactions(u, start=date(2024, 1, 3), end=date(2024, 1, 20))] == [20, 5]
+    assert [t["data"].day for t in db.find_transactions(u, categoria="transporte")] == [2]
+    assert [t["data"].day for t in db.find_transactions(u, uncategorized=True)] == [20]
+    assert db.find_transactions(u, end=date(2024, 1, 4), categoria="mercado") == []
+    assert "origem_categoria" not in db.find_transactions(u)[0]
 
 
-def test_correcoes_e_historico_de_retreino(db):
-    u = _usuario(db)
-    db.grava_extrato(u, nome_arquivo="a.csv", hash_arquivo="h1", parser="p", periodo_inicio=None,
-                     periodo_fim=None, transacoes=[_t(2), _t(3, "-1.00")])
-    novas_antes = db.correcoes_desde_ultimo_treino()
-    todas_antes = len(db.correcoes_para_treino())
-    [a, b] = db._todas("select id from public.transacoes where usuario_id = %s order by id", u)
-    assert db.muda_categoria(u, a["id"], "mercado")
-    assert db.muda_categoria(u, b["id"], None)  # "sem categoria" não é exemplo de treino
-    assert db.correcoes_desde_ultimo_treino() == novas_antes + 1
-    nova = [c for c in db.correcoes_para_treino() if c["valor"] == Decimal("-8.94")][-1]
-    assert len(db.correcoes_para_treino()) == todas_antes + 1
-    assert nova["categoria"] == "mercado" and nova["corrigida_em"] is not None
-    assert "original_cifrado" not in nova
-
-    tid = db.inicia_treino()
-    assert db.treino_rodando()
-    db.conclui_treino(tid, status="ok", correcoes=1, linhas_treino=10, acerto_correcoes_antes=0,
-                      acerto_correcoes_depois=100, acerto_base_depois=98.5)
-    assert not db.treino_rodando() and db.treinos(1)[0]["status"] == "ok"
-    # o treino "ok" começou depois da correção: o contador zera
-    assert db.correcoes_desde_ultimo_treino() == 0
+def test_transaction_period(db):
+    u = _user(db)
+    assert db.transaction_period(u) == (None, None)
+    db.save_statement(u, nome_arquivo="a.csv", hash_arquivo="h1", parser="p", periodo_inicio=None,
+                      periodo_fim=None, transactions=[_t(9), _t(2, "-1.00"), _t(30, "-2.00")])
+    assert db.transaction_period(u) == (date(2024, 1, 2), date(2024, 1, 30))
 
 
-_TENTA_TRAVA_DO_USUARIO = "select pg_try_advisory_xact_lock(hashtextextended(%s::text, 0))"
+def test_corrections_and_retraining_history(db):
+    u = _user(db)
+    db.save_statement(u, nome_arquivo="a.csv", hash_arquivo="h1", parser="p", periodo_inicio=None,
+                      periodo_fim=None, transactions=[_t(2), _t(3, "-1.00")])
+    new_before = db.corrections_since_last_training()
+    all_before = len(db.corrections_for_training())
+    [a, b] = db._all("select id from public.transacoes where usuario_id = %s order by id", u)
+    assert db.set_category(u, a["id"], "mercado")
+    assert db.set_category(u, b["id"], None)  # "uncategorized" is not a training example
+    assert db.corrections_since_last_training() == new_before + 1
+    new = [c for c in db.corrections_for_training() if c["valor"] == Decimal("-8.94")][-1]
+    assert len(db.corrections_for_training()) == all_before + 1
+    assert new["categoria"] == "mercado" and new["corrigida_em"] is not None
+    assert "original_cifrado" not in new
+
+    tid = db.start_training()
+    assert db.training_running()
+    db.finish_training(tid, status="ok", correcoes=1, linhas_treino=10, acerto_correcoes_antes=0,
+                       acerto_correcoes_depois=100, acerto_base_depois=98.5)
+    assert not db.training_running() and db.trainings(1)[0]["status"] == "ok"
+    # the "ok" training started after the correction: the counter resets
+    assert db.corrections_since_last_training() == 0
 
 
-def test_importacao_trava_so_o_mesmo_usuario_ate_o_commit(db):
-    u = _usuario(db)
-    db.grava_extrato(u, nome_arquivo="a.csv", hash_arquivo="h-trava", parser="p", periodo_inicio=None,
-                     periodo_fim=None, transacoes=[_t(5)])
-    # outra conexão (outra requisição) enquanto a primeira importação não terminou
-    outra = psycopg.connect(url_do_banco(), prepare_threshold=None)
+_TRY_USER_LOCK = "select pg_try_advisory_xact_lock(hashtextextended(%s::text, 0))"
+
+
+def test_import_locks_only_the_same_user_until_commit(db):
+    u = _user(db)
+    db.save_statement(u, nome_arquivo="a.csv", hash_arquivo="h-trava", parser="p", periodo_inicio=None,
+                      periodo_fim=None, transactions=[_t(5)])
+    # another connection (another request) while the first import has not finished
+    other = psycopg.connect(database_url(), prepare_threshold=None)
     try:
-        assert outra.execute(_TENTA_TRAVA_DO_USUARIO, (str(u),)).fetchone()[0] is False
-        assert outra.execute(_TENTA_TRAVA_DO_USUARIO, (str(uuid.uuid4()),)).fetchone()[0] is True
+        assert other.execute(_TRY_USER_LOCK, (str(u),)).fetchone()[0] is False
+        assert other.execute(_TRY_USER_LOCK, (str(uuid.uuid4()),)).fetchone()[0] is True
     finally:
-        outra.rollback()
-        outra.close()
+        other.rollback()
+        other.close()
 
 
-def test_um_retreino_por_vez_mesmo_em_outra_conexao(db):
-    assert db.inicia_treino_se_livre() is not None
-    outra = psycopg.connect(url_do_banco(), prepare_threshold=None)
+def test_one_retraining_at_a_time_even_on_another_connection(db):
+    assert db.start_training_if_free() is not None
+    other = psycopg.connect(database_url(), prepare_threshold=None)
     try:
-        outra.execute("set lock_timeout = '500ms'")
+        other.execute("set lock_timeout = '500ms'")
         with pytest.raises(psycopg.errors.LockNotAvailable):
-            Banco(outra).inicia_treino_se_livre()  # espera a trava em vez de iniciar outro
+            Database(other).start_training_if_free()  # waits for the lock instead of starting another
     finally:
-        outra.rollback()
-        outra.close()
+        other.rollback()
+        other.close()
 
 
-def _correcoes(db, u):
-    return db._todas("select transacao_id, categoria from public.correcoes where usuario_id = %s order by id", u)
+def _corrections(db, u):
+    return db._all("select transacao_id, categoria from public.correcoes where usuario_id = %s order by id", u)
 
 
-def test_correcao_sobrevive_a_exclusao_do_extrato(db):
-    """Exige a migração 0005 aplicada (python -m database.migrate)."""
-    u = _usuario(db)
-    g = db.grava_extrato(u, nome_arquivo="a.csv", hash_arquivo="h-corr-1", parser="p", periodo_inicio=None,
-                         periodo_fim=None, transacoes=[_t(5)])
-    [t] = db.busca_transacoes(u)
-    assert db.muda_categoria(u, t["id"], "mercado")
-    assert db.muda_categoria(u, t["id"], "compras")  # corrigir de novo atualiza a mesma linha
-    assert _correcoes(db, u) == [{"transacao_id": t["id"], "categoria": "compras"}]
-    assert db.apaga_extrato(u, g.extrato_id)
-    assert _correcoes(db, u) == [{"transacao_id": None, "categoria": "compras"}]
-    # o mesmo extrato importado de novo e corrigido: a correção antiga dá lugar à nova
-    db.grava_extrato(u, nome_arquivo="a.csv", hash_arquivo="h-corr-2", parser="p", periodo_inicio=None,
-                     periodo_fim=None, transacoes=[_t(5)])
-    [t2] = db.busca_transacoes(u)
-    assert db.muda_categoria(u, t2["id"], "mercado")
-    assert _correcoes(db, u) == [{"transacao_id": t2["id"], "categoria": "mercado"}]
-    assert db.muda_categoria(u, t2["id"], None)  # sem categoria desfaz a correção
-    assert _correcoes(db, u) == []
+def test_correction_survives_statement_deletion(db):
+    """Requires migration 0005 applied (python -m database.migrate)."""
+    u = _user(db)
+    g = db.save_statement(u, nome_arquivo="a.csv", hash_arquivo="h-corr-1", parser="p", periodo_inicio=None,
+                          periodo_fim=None, transactions=[_t(5)])
+    [t] = db.find_transactions(u)
+    assert db.set_category(u, t["id"], "mercado")
+    assert db.set_category(u, t["id"], "compras")  # correcting again updates the same row
+    assert _corrections(db, u) == [{"transacao_id": t["id"], "categoria": "compras"}]
+    assert db.delete_statement(u, g.statement_id)
+    assert _corrections(db, u) == [{"transacao_id": None, "categoria": "compras"}]
+    # the same statement imported again and corrected: the old correction gives way to the new one
+    db.save_statement(u, nome_arquivo="a.csv", hash_arquivo="h-corr-2", parser="p", periodo_inicio=None,
+                      periodo_fim=None, transactions=[_t(5)])
+    [t2] = db.find_transactions(u)
+    assert db.set_category(u, t2["id"], "mercado")
+    assert _corrections(db, u) == [{"transacao_id": t2["id"], "categoria": "mercado"}]
+    assert db.set_category(u, t2["id"], None)  # uncategorized undoes the correction
+    assert _corrections(db, u) == []

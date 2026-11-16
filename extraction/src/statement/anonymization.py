@@ -46,7 +46,7 @@ class PartyClass(StrEnum):
 
 @dataclass(frozen=True)
 class Review:
-    """The transaction leaves the CSV and goes to data/privado/revisar.csv."""
+    """The transaction leaves the CSV and goes to data/private/revisar.csv."""
 
     motivo: str  # short code, no statement content
 

@@ -139,7 +139,7 @@ class PartyClass(StrEnum):
 
 @dataclass(frozen=True)
 class Review:
-    """A transação sai da saída e vai para data/privado/revisar.csv."""
+    """A transação sai da saída e vai para data/private/revisar.csv."""
     motivo: str  # código curto, sem conteúdo do extrato
 
 
@@ -223,7 +223,7 @@ from importlib.resources import files
 from .models import INDIVIDUAL_PERSON, PaymentMethod
 from .normalization import normalize_text, strip_accents
 
-MAP_FILES = ("estabelecimentos_revisar.csv", "estabelecimentos_novos.csv")  # mapas do usuário (data/privado)
+MAP_FILES = ("estabelecimentos_revisar.csv", "estabelecimentos_novos.csv")  # mapas do usuário (data/private)
 METHODS_WITH_MERCHANT = {PaymentMethod.DEBIT_CARD, PaymentMethod.CREDIT_CARD, PaymentMethod.REFUND}
 
 

@@ -1,8 +1,8 @@
-"""Quem está chamando a API: confere o token do Supabase Auth que o frontend manda.
+"""Who is calling the API: checks the Supabase Auth token the frontend sends.
 
-O login acontece no frontend (supabase-js). A cada chamada, o frontend manda
-`Authorization: Bearer <access_token>` e a API pergunta ao Supabase de quem é o token
-(GET /auth/v1/user). A resposta fica em cache por 60 s para não consultar a cada clique.
+The login happens in the frontend (supabase-js). On every call, the frontend sends
+`Authorization: Bearer <access_token>` and the API asks Supabase whose token it is
+(GET /auth/v1/user). The answer is cached for 60 s so it does not query on every click.
 """
 
 from __future__ import annotations
@@ -17,18 +17,18 @@ from fastapi import Header, HTTPException
 
 from . import config
 
-_CACHE_SEGUNDOS = 60
-_cache: dict[str, tuple[float, "Usuario"]] = {}
+_CACHE_SECONDS = 60
+_cache: dict[str, tuple[float, "User"]] = {}
 
 
 @dataclass(frozen=True)
-class Usuario:
+class User:
     id: UUID
     email: str
-    nome: str
+    name: str
 
 
-def _consulta_supabase(token: str) -> Usuario | None:
+def _query_supabase(token: str) -> User | None:
     if not (config.SUPABASE_URL and config.SUPABASE_PUBLISHABLE_KEY):
         raise HTTPException(503, "login não configurado: preencha SUPABASE_PUBLISHABLE_KEY no .env")
     try:
@@ -39,38 +39,38 @@ def _consulta_supabase(token: str) -> Usuario | None:
     if r.status_code != 200:
         return None
     d = r.json()
-    return Usuario(UUID(d["id"]), d.get("email") or "", (d.get("user_metadata") or {}).get("nome", ""))
+    return User(UUID(d["id"]), d.get("email") or "", (d.get("user_metadata") or {}).get("nome", ""))
 
 
-def esquece_token(authorization: str | None) -> None:
-    """Logout: o token deixa de valer aqui na hora, sem esperar o cache expirar."""
+def forget_token(authorization: str | None) -> None:
+    """Logout: the token stops being valid here right away, without waiting for the cache to expire."""
     if authorization and authorization.lower().startswith("bearer "):
         _cache.pop(authorization[7:].strip(), None)
 
 
-def esquece_usuario(usuario_id: UUID) -> None:
-    """Conta excluída: todos os tokens dela (outros aparelhos e abas) deixam de valer aqui na hora.
+def forget_user(user_id: UUID) -> None:
+    """Deleted account: all its tokens (other devices and tabs) stop being valid here right away.
 
-    Sem isto, um token de outro aparelho continuava no cache por até 60 s, e a próxima
-    requisição tentava recriar o perfil de um login que já não existe (erro 500).
+    Without this, a token from another device stayed in the cache for up to 60 s, and the next
+    request tried to recreate the profile of a login that no longer exists (error 500).
     """
-    for token in [t for t, (_, u) in list(_cache.items()) if u.id == usuario_id]:
+    for token in [t for t, (_, u) in list(_cache.items()) if u.id == user_id]:
         _cache.pop(token, None)
 
 
-def usuario_atual(authorization: Annotated[str | None, Header()] = None) -> Usuario:
-    """Dependência das rotas que precisam de login. 401 se faltar ou não valer o token."""
+def current_user(authorization: Annotated[str | None, Header()] = None) -> User:
+    """Dependency of the routes that need login. 401 if the token is missing or not valid."""
     if not authorization or not authorization.lower().startswith("bearer "):
         raise HTTPException(401, "faça login para continuar")
     token = authorization[7:].strip()
-    agora = time.monotonic()
-    em_cache = _cache.get(token)
-    if em_cache and em_cache[0] > agora:
-        return em_cache[1]
-    usuario = _consulta_supabase(token)
-    if usuario is None:
+    now = time.monotonic()
+    cached = _cache.get(token)
+    if cached and cached[0] > now:
+        return cached[1]
+    user = _query_supabase(token)
+    if user is None:
         raise HTTPException(401, "sessão expirada: faça login de novo")
     if len(_cache) > 1000:
         _cache.clear()
-    _cache[token] = (agora + _CACHE_SEGUNDOS, usuario)
-    return usuario
+    _cache[token] = (now + _CACHE_SECONDS, user)
+    return user

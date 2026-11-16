@@ -1,195 +1,195 @@
-"""Consultas do assistente com transações inventadas."""
+"""Assistant queries with made-up transactions."""
 
 from datetime import date
 
 import pytest
 
-from agent import queries as c
+from agent import queries as q
 
 
-def _t(data, valor, tipo="saida", categoria="mercado", contraparte="LOJA FICTICIA", meio="cartao_debito"):
-    return {"data": data, "valor": valor, "tipo": tipo, "categoria": categoria, "contraparte": contraparte,
-            "meio": meio, "banco": "banco_teste"}
+def _t(day, amount, kind="saida", category="mercado", counterparty="LOJA FICTICIA", method="cartao_debito"):
+    return {"data": day, "valor": amount, "tipo": kind, "categoria": category, "contraparte": counterparty,
+            "meio": method, "banco": "banco_teste"}
 
 
 @pytest.fixture
 def df():
-    return c.tabela([
+    return q.to_dataframe([
         _t(date(2024, 1, 10), 5000, "entrada", "receitas", "", "salario"),
-        _t(date(2024, 1, 11), -300, categoria="mercado"),
-        _t(date(2024, 1, 12), -80, categoria="alimentacao_fora", contraparte="PIZZARIA X"),
-        _t(date(2024, 1, 20), -1500, categoria="financeiro", meio="pagamento_fatura"),  # não é despesa
+        _t(date(2024, 1, 11), -300, category="mercado"),
+        _t(date(2024, 1, 12), -80, category="alimentacao_fora", counterparty="PIZZARIA X"),
+        _t(date(2024, 1, 20), -1500, category="financeiro", method="pagamento_fatura"),  # not an expense
         _t(date(2024, 3, 5), 5000, "entrada", "receitas", "", "salario"),
-        _t(date(2024, 3, 6), -120, categoria="alimentacao_fora", contraparte="PIZZARIA X"),
-        _t(date(2024, 3, 7), -40, categoria="alimentacao_fora", contraparte="LANCHE Y"),
-        _t(date(2024, 3, 8), -900, categoria="compras", contraparte="LOJA Z"),
-        _t(date(2024, 3, 9), -50, categoria=None, contraparte="DESCONHECIDA"),
-        _t(date(2024, 3, 10), 30, "entrada", "financeiro", "", "estorno"),  # não é receita
+        _t(date(2024, 3, 6), -120, category="alimentacao_fora", counterparty="PIZZARIA X"),
+        _t(date(2024, 3, 7), -40, category="alimentacao_fora", counterparty="LANCHE Y"),
+        _t(date(2024, 3, 8), -900, category="compras", counterparty="LOJA Z"),
+        _t(date(2024, 3, 9), -50, category=None, counterparty="DESCONHECIDA"),
+        _t(date(2024, 3, 10), 30, "entrada", "financeiro", "", "estorno"),  # not income
     ])
 
 
-def test_janela_termina_no_mes_mais_recente_e_inclui_meses_vazios(df):
-    r = c.gastos_mensais(df, 3, "alimentacao_fora")
-    assert r.dados["por_mes"] == {"jan/24": 80.0, "fev/24": 0.0, "mar/24": 160.0}
-    assert r.dados["total"] == 240.0 and r.dados["periodo"] == "jan/24 a mar/24"
-    assert r.grafico["rotulos"] == ["jan/24", "fev/24", "mar/24"]
+def test_window_ends_in_the_most_recent_month_and_includes_empty_months(df):
+    r = q.monthly_spending(df, 3, "alimentacao_fora")
+    assert r.data["por_mes"] == {"jan/24": 80.0, "fev/24": 0.0, "mar/24": 160.0}
+    assert r.data["total"] == 240.0 and r.data["periodo"] == "jan/24 a mar/24"
+    assert r.chart["rotulos"] == ["jan/24", "fev/24", "mar/24"]
 
 
-def test_financeiro_nao_conta_como_despesa_e_sem_categoria_conta(df):
-    r = c.gastos_mensais(df, 3)
-    assert r.dados["por_mes"]["jan/24"] == 380.0      # sem os 1500 da fatura
-    assert r.dados["por_mes"]["mar/24"] == 1110.0     # inclui os 50 sem categoria
+def test_financeiro_is_not_an_expense_and_uncategorized_is(df):
+    r = q.monthly_spending(df, 3)
+    assert r.data["por_mes"]["jan/24"] == 380.0      # without the 1500 of the card bill
+    assert r.data["por_mes"]["mar/24"] == 1110.0     # includes the 50 without category
 
 
-def test_gastos_por_categoria_ordenado_com_percentual(df):
-    r = c.gastos_por_categoria(df, 1)
-    cats = r.dados["categorias"]
+def test_spending_by_category_sorted_with_percentage(df):
+    r = q.spending_by_category(df, 1)
+    cats = r.data["categorias"]
     assert [x["categoria"] for x in cats] == ["compras", "alimentacao_fora", "sem_categoria"]
-    assert r.dados["total_gasto"] == 1110.0 and cats[0]["percentual"] == 81.08
-    # pizza: uma fatia por categoria, na mesma ordem, com os totais
-    assert r.grafico["tipo"] == "pizza"
-    assert r.grafico["rotulos"] == ["Compras", "Alimentação fora", "Sem categoria"]
-    assert r.grafico["series"][0]["valores"] == [x["total"] for x in cats]
+    assert r.data["total_gasto"] == 1110.0 and cats[0]["percentual"] == 81.08
+    # pie: one slice per category, in the same order, with the totals
+    assert r.chart["tipo"] == "pizza"
+    assert r.chart["rotulos"] == ["Compras", "Alimentação fora", "Sem categoria"]
+    assert r.chart["series"][0]["valores"] == [x["total"] for x in cats]
 
 
-def test_receitas_x_despesas_e_saldo(df):
-    r = c.receitas_x_despesas(df, 3)
-    assert r.dados["por_mes"]["mar/24"] == {"receitas": 5000.0, "despesas": 1110.0, "saldo": 3890.0}
-    assert [s["nome"] for s in r.grafico["series"]] == ["Receitas", "Despesas"]
-    e = c.evolucao_saldo(df, 3)
-    assert e.dados["saldo_por_mes"] == {"jan/24": 4620.0, "fev/24": 0.0, "mar/24": 3890.0}
-    assert e.dados["saldo_acumulado"] == 8510.0
+def test_income_vs_expenses_and_balance(df):
+    r = q.income_vs_expenses(df, 3)
+    assert r.data["por_mes"]["mar/24"] == {"receitas": 5000.0, "despesas": 1110.0, "saldo": 3890.0}
+    assert [s["nome"] for s in r.chart["series"]] == ["Receitas", "Despesas"]
+    e = q.balance_evolution(df, 3)
+    assert e.data["saldo_por_mes"] == {"jan/24": 4620.0, "fev/24": 0.0, "mar/24": 3890.0}
+    assert e.data["saldo_acumulado"] == 8510.0
 
 
-def test_maiores_gastos_e_por_estabelecimento(df):
-    m = c.maiores_gastos(df, 3, 2)
-    assert [(x["estabelecimento"], x["valor"]) for x in m.dados["maiores"]] == [
+def test_largest_expenses_and_by_merchant(df):
+    m = q.largest_expenses(df, 3, 2)
+    assert [(x["estabelecimento"], x["valor"]) for x in m.data["maiores"]] == [
         ("LOJA Z", 900.0), ("LOJA FICTICIA", 300.0)]
-    e = c.gastos_por_estabelecimento(df, 3, categoria="alimentacao_fora")
-    assert e.dados["estabelecimentos"][0] == {"estabelecimento": "PIZZARIA X", "total": 200.0, "compras": 2}
+    e = q.spending_by_merchant(df, 3, category="alimentacao_fora")
+    assert e.data["estabelecimentos"][0] == {"estabelecimento": "PIZZARIA X", "total": 200.0, "compras": 2}
 
 
-def test_resumo_do_mes(df):
-    r = c.resumo_do_mes(df, 2024, 1)
-    assert (r.dados["receitas"], r.dados["despesas"], r.dados["saldo"]) == (5000.0, 380.0, 4620.0)
-    assert r.grafico["tipo"] == "pizza"
-    assert c.resumo_do_mes(df).dados["mes"] == "mar/24"
+def test_month_summary(df):
+    r = q.month_summary(df, 2024, 1)
+    assert (r.data["receitas"], r.data["despesas"], r.data["saldo"]) == (5000.0, 380.0, 4620.0)
+    assert r.chart["tipo"] == "pizza"
+    assert q.month_summary(df).data["mes"] == "mar/24"
 
 
-def test_sem_dados_e_categoria_invalida(df):
-    vazio = c.tabela([])
-    assert c.gastos_mensais(vazio).dados["sem_dados"] is True
-    assert c.painel(vazio)["tem_dados"] is False
+def test_no_data_and_invalid_category(df):
+    empty = q.to_dataframe([])
+    assert q.monthly_spending(empty).data["sem_dados"] is True
+    assert q.dashboard(empty)["tem_dados"] is False
     with pytest.raises(ValueError, match="categoria inválida"):
-        c.gastos_mensais(df, 3, "lazer")
+        q.monthly_spending(df, 3, "lazer")
 
 
-def test_meses_fora_do_limite_sao_ajustados(df):
-    assert len(c.gastos_mensais(df, 0).grafico["rotulos"]) == 1
-    assert len(c.gastos_mensais(df, 500).grafico["rotulos"]) == c.MAX_MESES
+def test_months_out_of_bounds_are_adjusted(df):
+    assert len(q.monthly_spending(df, 0).chart["rotulos"]) == 1
+    assert len(q.monthly_spending(df, 500).chart["rotulos"]) == q.MAX_MONTHS
 
 
-# --- período explícito (de/ate) ---
+# --- explicit period (start/end) ---
 
 @pytest.fixture
-def anos():
-    """Transações de 2022 a 2024, como um extrato longo (o mês mais recente é dez/24)."""
-    return c.tabela([
-        _t(date(2022, 3, 10), -100, categoria="mercado"),
-        _t(date(2023, 6, 10), -200, categoria="mercado"),
-        _t(date(2024, 1, 10), -300, categoria="transporte", contraparte="POSTO X"),
-        _t(date(2024, 12, 10), -400, categoria="mercado"),
+def years():
+    """Transactions from 2022 to 2024, like a long statement (the most recent month is Dec/24)."""
+    return q.to_dataframe([
+        _t(date(2022, 3, 10), -100, category="mercado"),
+        _t(date(2023, 6, 10), -200, category="mercado"),
+        _t(date(2024, 1, 10), -300, category="transporte", counterparty="POSTO X"),
+        _t(date(2024, 12, 10), -400, category="mercado"),
         _t(date(2024, 12, 15), 2000, "entrada", "receitas", "", "salario"),
     ])
 
 
-def test_ano_especifico_fora_dos_ultimos_meses(anos):
-    r = c.gastos_mensais(anos, de="2023-01", ate="2023-12")
-    assert r.dados["periodo"] == "jan/23 a dez/23" and r.dados["total"] == 200.0
-    assert len(r.grafico["rotulos"]) == 12 and "aviso" not in r.dados
+def test_specific_year_outside_the_last_months(years):
+    r = q.monthly_spending(years, start="2023-01", end="2023-12")
+    assert r.data["periodo"] == "jan/23 a dez/23" and r.data["total"] == 200.0
+    assert len(r.chart["rotulos"]) == 12 and "aviso" not in r.data
 
 
-def test_so_de_vai_ate_o_mes_mais_recente(anos):
-    r = c.gastos_mensais(anos, de="2024-01")
-    assert r.dados["periodo"] == "jan/24 a dez/24" and r.dados["total"] == 700.0
+def test_only_start_goes_up_to_the_most_recent_month(years):
+    r = q.monthly_spending(years, start="2024-01")
+    assert r.data["periodo"] == "jan/24 a dez/24" and r.data["total"] == 700.0
 
 
-def test_so_ate_usa_os_n_meses_que_terminam_nele(anos):
-    r = c.gastos_mensais(anos, 3, ate="2022-04")
-    assert r.dados["periodo"] == "fev/22 a abr/22" and r.dados["total"] == 100.0
+def test_only_end_uses_the_n_months_ending_in_it(years):
+    r = q.monthly_spending(years, 3, end="2022-04")
+    assert r.data["periodo"] == "fev/22 a abr/22" and r.data["total"] == 100.0
 
 
-def test_todas_as_consultas_aceitam_o_periodo(anos):
-    assert c.gastos_por_categoria(anos, de="2022-01", ate="2022-12").dados["total_gasto"] == 100.0
-    assert c.receitas_x_despesas(anos, de="2024-12", ate="2024-12").dados["saldo"] == 1600.0
-    assert c.evolucao_saldo(anos, de="2024-01", ate="2024-12").dados["saldo_acumulado"] == 1300.0
-    assert c.maiores_gastos(anos, de="2023-01", ate="2023-12").dados["maiores"][0]["valor"] == 200.0
-    assert c.gastos_por_estabelecimento(anos, de="2024-01", ate="2024-01").dados["estabelecimentos"] == [
+def test_every_query_accepts_the_period(years):
+    assert q.spending_by_category(years, start="2022-01", end="2022-12").data["total_gasto"] == 100.0
+    assert q.income_vs_expenses(years, start="2024-12", end="2024-12").data["saldo"] == 1600.0
+    assert q.balance_evolution(years, start="2024-01", end="2024-12").data["saldo_acumulado"] == 1300.0
+    assert q.largest_expenses(years, start="2023-01", end="2023-12").data["maiores"][0]["valor"] == 200.0
+    assert q.spending_by_merchant(years, start="2024-01", end="2024-01").data["estabelecimentos"] == [
         {"estabelecimento": "POSTO X", "total": 300.0, "compras": 1}]
 
 
-def test_periodo_sem_extrato_avisa_em_vez_de_so_dar_zero(anos):
-    r = c.gastos_mensais(anos, de="2021-01", ate="2021-12")
-    assert r.dados["total"] == 0.0 and r.dados["sem_extrato_no_periodo"] is True
-    assert "10/03/2022 a 15/12/2024" in r.dados["aviso"]
-    parcial = c.gastos_mensais(anos, de="2021-12", ate="2022-03")
-    assert "sem_extrato_no_periodo" not in parcial.dados and "Parte do período" in parcial.dados["aviso"]
-    assert "aviso" in c.evolucao_saldo(anos, de="2025-01", ate="2025-02").dados
+def test_period_without_statement_warns_instead_of_just_giving_zero(years):
+    r = q.monthly_spending(years, start="2021-01", end="2021-12")
+    assert r.data["total"] == 0.0 and r.data["sem_extrato_no_periodo"] is True
+    assert "10/03/2022 a 15/12/2024" in r.data["aviso"]
+    partial = q.monthly_spending(years, start="2021-12", end="2022-03")
+    assert "sem_extrato_no_periodo" not in partial.data and "Parte do período" in partial.data["aviso"]
+    assert "aviso" in q.balance_evolution(years, start="2025-01", end="2025-02").data
 
 
-@pytest.mark.parametrize("de, ate, erro", [
+@pytest.mark.parametrize("start, end, error", [
     ("2024", None, "de inválido"),
     ("2024-13", None, "de inválido"),
     ("01/2024", None, "de inválido"),
     ("2024-05", "2024-02", "período inválido"),
     ("2019-01", "2024-12", "período longo demais"),
 ])
-def test_periodo_invalido(anos, de, ate, erro):
-    with pytest.raises(ValueError, match=erro):
-        c.gastos_mensais(anos, de=de, ate=ate)
+def test_invalid_period(years, start, end, error):
+    with pytest.raises(ValueError, match=error):
+        q.monthly_spending(years, start=start, end=end)
 
 
-# --- mês do resumo e estornos ---
+# --- summary month and refunds ---
 
-def test_resumo_so_com_o_mes_usa_o_ano_mais_recente_com_aquele_mes(df):
-    # dados até mar/24: "janeiro" é jan/24 e "dezembro" é dez/23 (não o mês mais recente)
-    assert c.resumo_do_mes(df, None, 1).dados["mes"] == "jan/24"
-    assert c.resumo_do_mes(df, None, 1).dados["despesas"] == 380.0
-    assert c.resumo_do_mes(df, None, 12).dados["mes"] == "dez/23"
-    assert c.resumo_do_mes(df, 2024, None).dados["mes"] == "mar/24"
-
-
-def test_resumo_com_mes_invalido_devolve_erro_sem_excecao(df):
-    assert "erro" in c.resumo_do_mes(df, 2024, 13).dados
+def test_summary_with_only_the_month_uses_the_most_recent_year_with_that_month(df):
+    # data up to Mar/24: "January" is Jan/24 and "December" is Dec/23 (not the most recent month)
+    assert q.month_summary(df, None, 1).data["mes"] == "jan/24"
+    assert q.month_summary(df, None, 1).data["despesas"] == 380.0
+    assert q.month_summary(df, None, 12).data["mes"] == "dez/23"
+    assert q.month_summary(df, 2024, None).data["mes"] == "mar/24"
 
 
-def test_estorno_abate_a_compra_no_mesmo_estabelecimento():
-    # toda entrada é categorizada como receita (api/services/categorization.py), o estorno também
-    df = c.tabela([
-        _t(date(2024, 3, 1), -100, categoria="compras", contraparte="LOJA Z"),
-        _t(date(2024, 3, 2), -30, categoria="transporte", contraparte="UBER"),
+def test_summary_with_invalid_month_returns_error_without_exception(df):
+    assert "erro" in q.month_summary(df, 2024, 13).data
+
+
+def test_refund_offsets_the_purchase_at_the_same_merchant():
+    # every inflow is categorized as income (api/services/categorization.py), the refund too
+    df = q.to_dataframe([
+        _t(date(2024, 3, 1), -100, category="compras", counterparty="LOJA Z"),
+        _t(date(2024, 3, 2), -30, category="transporte", counterparty="UBER"),
         _t(date(2024, 3, 5), 100, "entrada", "receitas", "LOJA Z", "estorno"),
-        _t(date(2024, 3, 6), 15, "entrada", "receitas", "SEM COMPRA", "estorno"),  # sem compra: é receita
+        _t(date(2024, 3, 6), 15, "entrada", "receitas", "SEM COMPRA", "estorno"),  # no purchase: it is income
     ])
-    assert c.gastos_mensais(df, 1).dados["total"] == 30.0
-    # o estorno da LOJA Z já abateu a compra: não conta de novo como receita (só os 15 sem compra)
-    assert c.receitas_x_despesas(df, 1).dados["por_mes"]["mar/24"] == {
+    assert q.monthly_spending(df, 1).data["total"] == 30.0
+    # the LOJA Z refund already offset the purchase: it does not count again as income (only the 15 without purchase)
+    assert q.income_vs_expenses(df, 1).data["por_mes"]["mar/24"] == {
         "receitas": 15.0, "despesas": 30.0, "saldo": -15.0}
-    assert (c.resumo_do_mes(df).dados["receitas"], c.painel(df)["receitas"]) == (15.0, 15.0)
-    assert [x["categoria"] for x in c.gastos_por_categoria(df, 1).dados["categorias"]] == ["transporte"]
-    assert c.resumo_do_mes(df).dados["despesas"] == 30.0
-    assert c.gastos_por_estabelecimento(df, 1).dados["estabelecimentos"] == [
+    assert (q.month_summary(df).data["receitas"], q.dashboard(df)["receitas"]) == (15.0, 15.0)
+    assert [x["categoria"] for x in q.spending_by_category(df, 1).data["categorias"]] == ["transporte"]
+    assert q.month_summary(df).data["despesas"] == 30.0
+    assert q.spending_by_merchant(df, 1).data["estabelecimentos"] == [
         {"estabelecimento": "UBER", "total": 30.0, "compras": 1}]
-    # a compra continua sendo uma das maiores compras do período
-    assert c.maiores_gastos(df, 1).dados["maiores"][0]["valor"] == 100.0
+    # the purchase is still one of the largest purchases of the period
+    assert q.largest_expenses(df, 1).data["maiores"][0]["valor"] == 100.0
 
 
-def test_estorno_em_mes_sem_a_compra_nao_deixa_o_mes_negativo():
-    df = c.tabela([
-        _t(date(2024, 2, 1), -100, categoria="compras", contraparte="LOJA Z"),
+def test_refund_in_a_month_without_the_purchase_does_not_make_the_month_negative():
+    df = q.to_dataframe([
+        _t(date(2024, 2, 1), -100, category="compras", counterparty="LOJA Z"),
         _t(date(2024, 3, 5), 100, "entrada", "receitas", "LOJA Z", "estorno"),
     ])
-    assert c.gastos_mensais(df, 2).dados["por_mes"] == {"fev/24": 100.0, "mar/24": 0.0}
-    assert c.receitas_x_despesas(df, 1).dados["total_despesas"] == 0.0
-    # o resumo de março também vê a compra de fevereiro: o estorno não vira receita no mês
-    assert c.resumo_do_mes(df, 2024, 3).dados["receitas"] == 0.0
+    assert q.monthly_spending(df, 2).data["por_mes"] == {"fev/24": 100.0, "mar/24": 0.0}
+    assert q.income_vs_expenses(df, 1).data["total_despesas"] == 0.0
+    # the March summary also sees the February purchase: the refund does not become income in the month
+    assert q.month_summary(df, 2024, 3).data["receitas"] == 0.0

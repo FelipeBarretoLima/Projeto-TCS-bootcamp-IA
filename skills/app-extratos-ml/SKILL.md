@@ -10,7 +10,7 @@ categoria de cada transação. O pré-processamento fica **dentro** do `.pkl`: o
 colunas do parser como estão e devolve a categoria, sem código extra na API.
 
 ```
-python -m statement tudo  ->  data/saida/transacoes.csv            (8 colunas)
+python -m statement tudo  ->  data/output/transacoes.csv            (8 colunas)
 python -m ml.label        ->  ml/dados/transacoes_rotuladas.csv    (8 + categoria)   treino
 python -m ml.train        ->  ml/modelos/svm_tfidf.pkl             (modelo final)
 API                       ->  entrada = receitas (regra); saída = modelo.predict
@@ -55,7 +55,7 @@ Entrada: exatamente o CSV do parser (cabeçalho conferido). Saída: as mesmas co
 ordem e com os mesmos valores, mais `categoria` no fim.
 
 1. `by_rule` primeiro.
-2. Senão, o **mapa de estabelecimentos**, mantido à mão pelo usuário em `data/privado/` (tem nomes
+2. Senão, o **mapa de estabelecimentos**, mantido à mão pelo usuário em `data/private/` (tem nomes
    reais, fora do git):
    - `estabelecimentos_revisar.csv` é o primeiro mapa (prioridade); `estabelecimentos_novos.csv`
      cresce a cada rotulagem com o que ainda não está mapeado;
