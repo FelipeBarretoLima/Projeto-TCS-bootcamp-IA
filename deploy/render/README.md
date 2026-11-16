@@ -43,7 +43,7 @@ ao subir. O script mostra o total e avisa se passar do limite.
    originais já gravados não abrem).
 3. No serviço criado: **Environment > Secret Files > Add Secret File**, um para cada arquivo
    do passo 1. O **nome tem que ser exatamente o do arquivo**; no conteúdo, cole o texto do arquivo
-   (ex.: `Get-Content -Raw -Encoding UTF8 "$HOMEender-secret-files\<arquivo>" | Set-Clipboard`).
+   (ex.: `Get-Content -Raw -Encoding UTF8 "$HOME\render-secret-files\<arquivo>" | Set-Clipboard`).
 4. **Manual Deploy > Deploy latest commit**. O primeiro build leva ~5–10 min.
 5. Teste: `https://<nome>.onrender.com/api/saude` deve mostrar `{"status":"ok"}`.
 
