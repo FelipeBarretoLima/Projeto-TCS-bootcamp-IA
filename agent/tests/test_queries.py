@@ -35,6 +35,14 @@ def test_window_ends_in_the_most_recent_month_and_includes_empty_months(df):
     assert r.chart["rotulos"] == ["jan/24", "fev/24", "mar/24"]
 
 
+def test_monthly_income_counts_the_inflows_like_the_dashboard(df):
+    # the LLM may ask monthly_spending for "receitas": it used to sum outflows and give zero
+    r = q.monthly_spending(df, 3, "receitas")
+    assert r.data["por_mes"] == {"jan/24": 5000.0, "fev/24": 0.0, "mar/24": 5000.0}
+    assert r.data["total"] == q.income_vs_expenses(df, 3).data["total_receitas"]
+    assert r.chart["titulo"].startswith("Receitas por mês")
+
+
 def test_financeiro_is_not_an_expense_and_uncategorized_is(df):
     r = q.monthly_spending(df, 3)
     assert r.data["por_mes"]["jan/24"] == 380.0      # without the 1500 of the card bill
