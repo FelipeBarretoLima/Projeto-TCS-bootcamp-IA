@@ -189,15 +189,22 @@ def available_period(df: pd.DataFrame) -> Result:
 
 def monthly_spending(df: pd.DataFrame, months: int = 6, category: str | None = None,
                      start: str | None = None, end: str | None = None) -> Result:
-    """Total spent in each month (in one category or in all of them)."""
+    """Total spent in each month (in one category or in all of them).
+
+    The "receitas" category is income, not spending: for it, the month total comes from the inflows
+    (the same as the dashboard), otherwise "quanto recebi em 2025?" through this tool gave zero.
+    """
     category = _validate_category(category)
     if df.empty:
         return _empty()
     window = _window(df, months, start, end)
-    d = _expenses(df)
-    if category:
-        d = d[d["categoria"] == category]
-    per_month = _non_negative(d.groupby("mes")["gasto"].sum().reindex(window, fill_value=0.0))
+    if category == "receitas":
+        per_month = _income(df).groupby("mes")["valor"].sum().reindex(window, fill_value=0.0)
+    else:
+        d = _expenses(df)
+        if category:
+            d = d[d["categoria"] == category]
+        per_month = _non_negative(d.groupby("mes")["gasto"].sum().reindex(window, fill_value=0.0))
     name = CATEGORY_NAMES[category] if category else "Gastos"
     values = [_r(v) for v in per_month]
     return Result(
